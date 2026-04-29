@@ -141,7 +141,19 @@ function handleResponseChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
       </div>
 
       <div className="max-w-4xl mx-auto px-6 py-8">
-
+        {/* Navigation to other modules */}
+        <div className="flex gap-3 mb-6">
+          <span className="px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-semibold">
+            ✍️ Writing
+          </span>
+          <a
+            href="/reading"
+            className="px-4 py-2 bg-white border rounded-full text-gray-600 text-sm hover:border-green-400"
+          >
+            📖 Reading
+          </a>
+        </div>
+        
         {/* Task Type Selector */}
         <div className="flex gap-3 mb-6">
           {["Writing Task 1", "Writing Task 2"].map((type) => (
