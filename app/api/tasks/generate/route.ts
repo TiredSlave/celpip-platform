@@ -36,7 +36,8 @@ export async function POST(request: Request) {
       ]
     });
 
-    const text = response.content[0].text;
+    const block = response.content[0];
+    const text = block.type === "text" ? block.text : "";
     const cleaned = text
       .replace(/```json/g, "")
       .replace(/```/g, "")

@@ -44,7 +44,8 @@ sample_improved_sentence (string).`
       ]
     });
 
-    const text = response.content[0].text;
+    const block = response.content[0];
+    const text = block.type === "text" ? block.text : "";
     const cleaned = text
       .replace(/```json/g, "")
       .replace(/```/g, "")
