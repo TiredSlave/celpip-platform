@@ -121,6 +121,9 @@ export default function DashboardPage() {
   const readingAttempts = attempts.filter(a =>
     a.task_type.includes("Reading")
   );
+  const speakingAttempts = attempts.filter(a =>
+    a.task_type.includes("Speaking")
+  );
 
   // Custom tooltip for chart
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -238,13 +241,31 @@ export default function DashboardPage() {
                   }}
                 />
                 <Line
-                  type="monotone"
-                  dataKey="band"
-                  stroke="#2563eb"
-                  strokeWidth={2.5}
-                  dot={{ fill: "#2563eb", r: 5 }}
-                  activeDot={{ r: 7 }}
-                />
+                    type="monotone"
+                    dataKey="band"
+                    stroke="#2563eb"
+                    strokeWidth={2.5}
+                    dot={(props: any) => {
+                      const { cx, cy, payload } = props;
+                      const color = payload.task.includes("Writing")
+                        ? "#2563eb"
+                        : payload.task.includes("Reading")
+                        ? "#16a34a"
+                        : "#9333ea";
+                      return (
+                        <circle
+                          key={`dot-${payload.index}`}
+                          cx={cx}
+                          cy={cy}
+                          r={5}
+                          fill={color}
+                          stroke="white"
+                          strokeWidth={2}
+                        />
+                      );
+                    }}
+                    activeDot={{ r: 7 }}
+                  />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -265,40 +286,67 @@ export default function DashboardPage() {
         </div>
 
         {/* Module Stats */}
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="bg-white rounded-xl shadow p-5">
-            <h3 className="font-semibold text-gray-700 mb-3">✍️ Writing</h3>
-            <p className="text-3xl font-bold text-blue-600">
-              {writingAttempts.length}
-            </p>
-            <p className="text-gray-400 text-sm">attempts</p>
-            {writingAttempts.length > 0 && (
-              <p className="text-sm text-gray-600 mt-2">
-                Avg: <span className={`font-bold ${getBandColor(
-                  parseFloat((writingAttempts.reduce((s, a) => s + a.overall_band, 0) / writingAttempts.length).toFixed(1))
-                )}`}>
-                  {(writingAttempts.reduce((s, a) => s + a.overall_band, 0) / writingAttempts.length).toFixed(1)}
-                </span>
-              </p>
-            )}
-          </div>
-          <div className="bg-white rounded-xl shadow p-5">
-            <h3 className="font-semibold text-gray-700 mb-3">📖 Reading</h3>
-            <p className="text-3xl font-bold text-green-600">
-              {readingAttempts.length}
-            </p>
-            <p className="text-gray-400 text-sm">attempts</p>
-            {readingAttempts.length > 0 && (
-              <p className="text-sm text-gray-600 mt-2">
-                Avg: <span className={`font-bold ${getBandColor(
-                  parseFloat((readingAttempts.reduce((s, a) => s + a.overall_band, 0) / readingAttempts.length).toFixed(1))
-                )}`}>
-                  {(readingAttempts.reduce((s, a) => s + a.overall_band, 0) / readingAttempts.length).toFixed(1)}
-                </span>
-              </p>
-            )}
-          </div>
-        </div>
+<div className="grid grid-cols-3 gap-4 mb-8">
+  <div className="bg-white rounded-xl shadow p-5">
+    <h3 className="font-semibold text-gray-700 mb-3">✍️ Writing</h3>
+    <p className="text-3xl font-bold text-blue-600">
+      {writingAttempts.length}
+    </p>
+    <p className="text-gray-400 text-sm">attempts</p>
+    {writingAttempts.length > 0 && (
+      <p className="text-sm text-gray-600 mt-2">
+        Avg: <span className={`font-bold ${getBandColor(
+          parseFloat((writingAttempts.reduce((s, a) => s + a.overall_band, 0) / writingAttempts.length).toFixed(1))
+        )}`}>
+          {(writingAttempts.reduce((s, a) => s + a.overall_band, 0) / writingAttempts.length).toFixed(1)}
+        </span>
+      </p>
+    )}
+    {writingAttempts.length === 0 && (
+      <p className="text-xs text-gray-400 mt-2">No attempts yet</p>
+    )}
+  </div>
+
+  <div className="bg-white rounded-xl shadow p-5">
+    <h3 className="font-semibold text-gray-700 mb-3">📖 Reading</h3>
+    <p className="text-3xl font-bold text-green-600">
+      {readingAttempts.length}
+    </p>
+    <p className="text-gray-400 text-sm">attempts</p>
+    {readingAttempts.length > 0 && (
+      <p className="text-sm text-gray-600 mt-2">
+        Avg: <span className={`font-bold ${getBandColor(
+          parseFloat((readingAttempts.reduce((s, a) => s + a.overall_band, 0) / readingAttempts.length).toFixed(1))
+        )}`}>
+          {(readingAttempts.reduce((s, a) => s + a.overall_band, 0) / readingAttempts.length).toFixed(1)}
+        </span>
+      </p>
+    )}
+    {readingAttempts.length === 0 && (
+      <p className="text-xs text-gray-400 mt-2">No attempts yet</p>
+    )}
+  </div>
+
+  <div className="bg-white rounded-xl shadow p-5">
+    <h3 className="font-semibold text-gray-700 mb-3">🎤 Speaking</h3>
+    <p className="text-3xl font-bold text-purple-600">
+      {speakingAttempts.length}
+    </p>
+    <p className="text-gray-400 text-sm">attempts</p>
+    {speakingAttempts.length > 0 && (
+      <p className="text-sm text-gray-600 mt-2">
+        Avg: <span className={`font-bold ${getBandColor(
+          parseFloat((speakingAttempts.reduce((s, a) => s + a.overall_band, 0) / speakingAttempts.length).toFixed(1))
+        )}`}>
+          {(speakingAttempts.reduce((s, a) => s + a.overall_band, 0) / speakingAttempts.length).toFixed(1)}
+        </span>
+      </p>
+    )}
+    {speakingAttempts.length === 0 && (
+      <p className="text-xs text-gray-400 mt-2">No attempts yet</p>
+    )}
+  </div>
+</div>
 
         {/* Practice Button */}
         <div className="grid grid-cols-2 gap-4 mb-8">
@@ -313,6 +361,12 @@ export default function DashboardPage() {
             className="block bg-green-600 hover:bg-green-700 text-white font-semibold py-4 rounded-xl shadow text-center text-lg transition"
           >
             📖 Practice Reading
+          </a>
+          <a
+            href="/speaking"
+            className="block bg-purple-600 hover:bg-purple-700 text-white font-semibold py-4 rounded-xl shadow text-center text-lg transition"
+          >
+            🎤 Speaking
           </a>
         </div>
 

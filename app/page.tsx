@@ -195,6 +195,9 @@ function handleResponseChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
           >
             📖 Reading
           </a>
+          <a href="/speaking" className="px-4 py-2 bg-white border rounded-full text-gray-600 text-sm hover:border-purple-400">
+            🎤 Speaking
+          </a>
         </div>
         
         {/* Task Type Selector */}
