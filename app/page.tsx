@@ -45,25 +45,68 @@ export default function Home() {
   const [loadingFeedback, setLoadingFeedback] = useState(false);
   const [wordCount, setWordCount] = useState(0);
   const [error, setError] = useState(""); 
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerRef, setTimerRef] = useState<NodeJS.Timeout | null>(null);
 
   async function generateTask() {
-    setLoadingTask(true);
-    setFeedback(null);
-    setUserResponse("");
-    setWordCount(0);
-    try {
-      const res = await fetch("/api/tasks/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskType: activeTask })
-      });
-      const data = await res.json();
-      setTask(data);
-    } catch (err) {
-      console.error(err);
-    }
-    setLoadingTask(false);
+  setLoadingTask(true);
+  setFeedback(null);
+  setUserResponse("");
+  setWordCount(0);
+  stopTimer();
+  try {
+    const res = await fetch("/api/tasks/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskType: activeTask })
+    });
+    const data = await res.json();
+    setTask(data);
+
+    // Start timer based on task type
+    const minutes = activeTask === "Writing Task 2" ? 26 : 27;
+    startTimer(minutes);
+
+  } catch (err) {
+    console.error(err);
   }
+  setLoadingTask(false);
+}
+
+  function startTimer(minutes: number) {
+  // Clear any existing timer
+  if (timerRef) clearInterval(timerRef);
+
+  const seconds = minutes * 60;
+  setTimeLeft(seconds);
+  setTimerRunning(true);
+
+  const interval = setInterval(() => {
+    setTimeLeft(prev => {
+      if (prev <= 1) {
+        clearInterval(interval);
+        setTimerRunning(false);
+        return 0;
+      }
+      return prev - 1;
+    });
+  }, 1000);
+
+  setTimerRef(interval);
+}
+
+function stopTimer() {
+  if (timerRef) clearInterval(timerRef);
+  setTimerRunning(false);
+  setTimeLeft(0);
+}
+
+function formatTime(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
 
   async function submitResponse() {
   if (!task || !userResponse.trim()) return;
@@ -285,6 +328,40 @@ function handleResponseChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
                 ❌ {error}
               </div>
             )}
+            {/* Timer */}
+    {timeLeft > 0 && (
+      <div className={`flex items-center justify-between rounded-lg p-4 mb-4 ${
+        timeLeft < 300
+          ? "bg-red-50 border border-red-200"
+          : "bg-blue-50 border border-blue-200"
+      }`}>
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">⏱</span>
+          <div>
+            <p className="text-sm text-gray-500">Time Remaining</p>
+            <p className={`text-3xl font-bold font-mono ${
+              timeLeft < 300 ? "text-red-600" : "text-blue-600"
+            }`}>
+              {formatTime(timeLeft)}
+            </p>
+          </div>
+        </div>
+        {timeLeft < 300 && (
+          <p className="text-red-500 text-sm font-medium animate-pulse">
+            ⚠️ Less than 5 minutes left!
+          </p>
+        )}
+      </div>
+    )}
+
+    {/* Time is up message */}
+    {timeLeft === 0 && timerRunning === false && task && !feedback && (
+      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+        <p className="text-orange-600 font-semibold">
+          ⏰ Time is up! Please submit your response.
+        </p>
+      </div>
+    )}
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-lg font-semibold text-gray-700">
                 Your Response
