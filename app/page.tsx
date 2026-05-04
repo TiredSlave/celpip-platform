@@ -9,6 +9,9 @@ type Task1 = {
   bullet_points: string[];
   word_limit: number;
   time_limit_minutes: number;
+  sample_answer?: string;
+  sample_answer_band?: number;
+  sample_answer_notes?: string[];
 };
 
 type Task2 = {
@@ -18,6 +21,9 @@ type Task2 = {
   opinion_options: string[];
   word_limit: number;
   time_limit_minutes: number;
+  sample_answer?: string;
+  sample_answer_band?: number;
+  sample_answer_notes?: string[];
 };
 
 type Task = Task1 | Task2;
@@ -186,6 +192,9 @@ function handleResponseChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
       <div className="max-w-4xl mx-auto px-6 py-8">
         {/* Navigation to other modules */}
         <div className="flex gap-3 mb-6">
+          <a href="/listening" className="px-4 py-2 bg-white border rounded-full text-gray-600 text-sm hover:border-orange-400">
+            🎧 Listening
+          </a>
           <span className="px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-semibold">
             ✍️ Writing
           </span>
@@ -491,11 +500,42 @@ function handleResponseChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
             {/* Try Again */}
             <button
               onClick={generateTask}
-              className="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white
-                         font-semibold py-3 px-6 rounded-xl shadow transition"
+              className="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl shadow transition"
             >
               🔄 Try Another Task
             </button>
+
+            {/* Sample Answer */}
+            {task && (task as Task1).sample_answer && (
+              <div className="bg-white rounded-xl shadow p-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <h4 className="font-bold text-green-700">Model Answer</h4>
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">
+                    Band {(task as Task1).sample_answer_band}
+                  </span>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4 mb-3">
+                  <p className="text-gray-700 text-sm whitespace-pre-wrap">
+                    {(task as Task1).sample_answer}
+                  </p>
+                </div>
+                {(task as Task1).sample_answer_notes && (
+                  <div>
+                    <p className="font-semibold text-gray-700 text-sm mb-2">
+                      What makes this a high band answer:
+                    </p>
+                    <ul className="space-y-1">
+                      {(task as Task1).sample_answer_notes!.map((note: string, idx: number) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
+                          <span className="text-green-500">✓</span>
+                          {note}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

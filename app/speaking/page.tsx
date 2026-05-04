@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { supabase } from "../lib/supabase";
 
 type SpeakingTask = {
@@ -10,6 +10,9 @@ type SpeakingTask = {
   preparation_time_seconds: number;
   speaking_time_seconds: number;
   tips: string[];
+  image_url?: string;
+  image_url_1?: string;
+  image_url_2?: string;
 };
 
 type Evaluation = {
@@ -96,24 +99,20 @@ export default function SpeakingPage() {
 
   function startRecording() {
     if (!task) return;
-
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
-
     if (!SpeechRecognition) {
-      setError("Speech recognition is not supported in your browser. Please use Google Chrome.");
+      setError("Please use Google Chrome for speech recognition.");
       setPhase("idle");
       return;
     }
-
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
     recognitionRef.current = recognition;
     finalTranscriptRef.current = "";
-
     recognition.onresult = (event: any) => {
       let interim = "";
       let final = "";
@@ -124,24 +123,18 @@ export default function SpeakingPage() {
           interim += event.results[i][0].transcript;
         }
       }
-      if (final) {
-        finalTranscriptRef.current += final;
-      }
+      if (final) finalTranscriptRef.current += final;
       setInterimTranscript(interim);
       setTranscript(finalTranscriptRef.current);
     };
-
     recognition.onerror = (event: any) => {
-      console.error("Speech recognition error:", event.error);
       if (event.error !== "no-speech") {
         setError("Microphone error: " + event.error);
       }
     };
-
     recognition.start();
     setPhase("recording");
     setRecTimeLeft(task.speaking_time_seconds);
-
     timerRef.current = setInterval(() => {
       setRecTimeLeft(prev => {
         if (prev <= 1) {
@@ -155,29 +148,22 @@ export default function SpeakingPage() {
   }
 
   function stopRecording() {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
+    if (recognitionRef.current) recognitionRef.current.stop();
     if (timerRef.current) clearInterval(timerRef.current);
     setPhase("processing");
-    setTimeout(() => {
-      submitTranscript();
-    }, 1000);
+    setTimeout(() => submitTranscript(), 1000);
   }
 
   async function submitTranscript() {
     if (!task) return;
     const finalText = finalTranscriptRef.current.trim();
-
     if (!finalText) {
-      setError("No speech detected. Please make sure your microphone is working and try again.");
+      setError("No speech detected. Please try again.");
       setPhase("idle");
       return;
     }
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
-
       const res = await fetch("/api/speaking/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -189,7 +175,6 @@ export default function SpeakingPage() {
           token: session?.access_token || ""
         })
       });
-
       const data = await res.json();
       if (data.error) {
         setError(data.error);
@@ -209,24 +194,22 @@ export default function SpeakingPage() {
     <main className="min-h-screen bg-gray-50">
       <div className="bg-purple-700 text-white py-6 px-6 shadow">
         <h1 className="text-3xl font-bold">CELPIP Speaking Practice</h1>
-        <p className="text-purple-200 mt-1">AI-powered speaking evaluation using browser speech recognition</p>
+        <p className="text-purple-200 mt-1">AI-powered speaking evaluation</p>
       </div>
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="flex gap-3 mb-6 flex-wrap">
           <a href="/" className="px-4 py-2 bg-white border rounded-full text-gray-600 text-sm hover:border-blue-400">Writing</a>
           <a href="/reading" className="px-4 py-2 bg-white border rounded-full text-gray-600 text-sm hover:border-green-400">Reading</a>
           <span className="px-4 py-2 bg-purple-600 text-white rounded-full text-sm font-semibold">Speaking</span>
+          <a href="/listening" className="px-4 py-2 bg-white border rounded-full text-gray-600 text-sm hover:border-orange-400">Listening</a>
         </div>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-sm text-blue-800">
-          <strong>Note:</strong> This module uses your browser built-in speech recognition.
-          Please use <strong>Google Chrome</strong> for best results and allow microphone access when prompted.
+          Use Google Chrome for best results. Allow microphone access when prompted.
         </div>
 
         {error && (
-          <div className="bg-red-50 text-red-600 rounded-lg p-4 mb-6 text-sm">
-            {error}
-          </div>
+          <div className="bg-red-50 text-red-600 rounded-lg p-4 mb-6 text-sm">{error}</div>
         )}
 
         <div className="bg-white rounded-xl shadow p-4 mb-6">
@@ -236,7 +219,7 @@ export default function SpeakingPage() {
               <button
                 key={num}
                 onClick={() => setTaskNumber(num)}
-                className={`py-2 rounded-lg text-sm font-medium transition ${taskNumber === num ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                className={"py-2 rounded-lg text-sm font-medium transition " + (taskNumber === num ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}
               >
                 Task {num}
               </button>
@@ -265,6 +248,30 @@ export default function SpeakingPage() {
               <p className="font-semibold text-gray-700 mb-1">Situation:</p>
               <p className="text-gray-700">{task.situation}</p>
             </div>
+
+            {task.task_number === 3 && task.image_url && (
+              <div className="mb-4">
+                <p className="font-semibold text-gray-700 mb-2">Describe this image:</p>
+                <img src={task.image_url} alt="Speaking task" className="w-full rounded-lg shadow" />
+              </div>
+            )}
+
+            {task.task_number === 5 && task.image_url_1 && (
+              <div className="mb-4">
+                <p className="font-semibold text-gray-700 mb-2">Compare these two images:</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1 text-center">Image 1</p>
+                    <img src={task.image_url_1} alt="Image 1" className="w-full rounded-lg shadow" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1 text-center">Image 2</p>
+                    <img src={task.image_url_2} alt="Image 2" className="w-full rounded-lg shadow" />
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="mb-4">
               <p className="font-semibold text-gray-700 mb-1">Your Task:</p>
               <p className="text-gray-800 text-lg">{task.prompt}</p>
@@ -299,6 +306,15 @@ export default function SpeakingPage() {
                 <p className="text-gray-700">{task.prompt}</p>
               </div>
             )}
+            {task && task.task_number === 3 && task.image_url && (
+              <img src={task.image_url} alt="Speaking task" className="w-full rounded-lg mt-4" />
+            )}
+            {task && task.task_number === 5 && task.image_url_1 && (
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <img src={task.image_url_1} alt="Image 1" className="w-full rounded-lg" />
+                <img src={task.image_url_2} alt="Image 2" className="w-full rounded-lg" />
+              </div>
+            )}
           </div>
         )}
 
@@ -315,7 +331,15 @@ export default function SpeakingPage() {
                 <p className="text-gray-700">{task.prompt}</p>
               </div>
             )}
-            {/* Live transcript */}
+            {task && task.task_number === 3 && task.image_url && (
+              <img src={task.image_url} alt="Speaking task" className="w-full rounded-lg mb-4" />
+            )}
+            {task && task.task_number === 5 && task.image_url_1 && (
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <img src={task.image_url_1} alt="Image 1" className="w-full rounded-lg" />
+                <img src={task.image_url_2} alt="Image 2" className="w-full rounded-lg" />
+              </div>
+            )}
             {(transcript || interimTranscript) && (
               <div className="bg-purple-50 rounded-lg p-4 mb-4 text-left">
                 <p className="text-sm text-purple-600 font-semibold mb-1">Live transcript:</p>
@@ -336,7 +360,7 @@ export default function SpeakingPage() {
 
         {phase === "processing" && (
           <div className="bg-white rounded-xl shadow p-8 mb-6 text-center">
-            <div className="text-6xl mb-4">🔄</div>
+            <div className="text-6xl mb-4">processing...</div>
             <h3 className="text-xl font-bold text-gray-800 mb-2">Processing Your Response</h3>
             <p className="text-gray-500">Evaluating with Claude CELPIP examiner...</p>
           </div>
@@ -350,14 +374,14 @@ export default function SpeakingPage() {
             </div>
             <div className="bg-white rounded-xl shadow p-6 text-center">
               <h3 className="text-xl font-bold text-gray-800 mb-4">Your Results</h3>
-              <p className={`text-7xl font-bold ${getBandColor(evaluation.overall_band)}`}>{evaluation.overall_band}</p>
+              <p className={"text-7xl font-bold " + getBandColor(evaluation.overall_band)}>{evaluation.overall_band}</p>
               <p className="text-gray-400 text-sm mt-1">Overall Band Score</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               {Object.entries(evaluation.subscores).map(([key, value]) => (
                 <div key={key} className="bg-white rounded-xl shadow p-4">
                   <p className="text-sm text-gray-500 capitalize mb-1">{key.replace(/_/g, " ")}</p>
-                  <p className={`text-2xl font-bold ${getBandColor(value as number)}`}>
+                  <p className={"text-2xl font-bold " + getBandColor(value as number)}>
                     {value as number}<span className="text-gray-400 text-sm font-normal"> / 12</span>
                   </p>
                 </div>
