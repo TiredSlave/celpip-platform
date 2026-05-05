@@ -140,8 +140,10 @@ export default function TasksPage() {
   } catch (err) {
     console.error("Error:", err);
     setMessage("Something went wrong. Please try again.");
-  }
-  }
+  } finally {
+    setGenerating(false);
+    setTimeout(() => setMessage(""), 3000);
+  }}
   async function generateTaskPair() {
     setGeneratingPair(true);
     setMessage("");
@@ -165,7 +167,7 @@ export default function TasksPage() {
     } catch (err) {
       setMessage("Something went wrong. Please try again.");
     }
-    setGeneratingPair(false);
+    setTimeout(() => setGeneratingPair(false), 500);
     setTimeout(() => setMessage(""), 5000);
   }
 

@@ -9,38 +9,32 @@ const supabase = createClient(
 );
 
 async function generateImage(prompt: string): Promise<string | null> {
+  console.log("=== generateImage called ===");
+  console.log("API KEY exists:", !!process.env.STABILITY_API_KEY);
   try {
+    const formData = new FormData();
+    formData.append("prompt", prompt + ", realistic photo, high quality, natural lighting, everyday Canadian scene");
+    formData.append("negative_prompt", "blurry, distorted, text, watermark, nsfw");
+    formData.append("output_format", "png");
+    formData.append("aspect_ratio", "16:9");
     const response = await fetch(
-      "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
+      "https://api.stability.ai/v2beta/stable-image/generate/core",
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           "Authorization": `Bearer ${process.env.STABILITY_API_KEY}`,
-          "Accept": "application/json"
+          "Accept": "image/*"
         },
-        body: JSON.stringify({
-          text_prompts: [
-            {
-              text: prompt + ", realistic photo, high quality, natural lighting, everyday Canadian scene",
-              weight: 1
-            },
-            {
-              text: "blurry, distorted, text, watermark, nsfw",
-              weight: -1
-            }
-          ],
-          cfg_scale: 7,
-          height: 768,
-          width: 1024,
-          samples: 1,
-          steps: 30
-        })
+        body: formData
       }
     );
-    if (!response.ok) return null;
-    const data = await response.json();
-    return data.artifacts[0].base64;
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Stability error:", errText);
+      return null;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer).toString("base64");
   } catch (error) {
     return null;
   }

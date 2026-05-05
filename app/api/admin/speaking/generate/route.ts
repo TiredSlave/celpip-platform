@@ -22,31 +22,21 @@ const taskDescriptions: Record<number, string> = {
 async function generateImage(prompt: string): Promise<string | null> {
   try {
     const response = await fetch(
-      "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
+      "https://api.stability.ai/v2beta/stable-image/generate/core",
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           "Authorization": `Bearer ${process.env.STABILITY_API_KEY}`,
-          "Accept": "application/json"
+          "Accept": "image/*"
         },
-        body: JSON.stringify({
-          text_prompts: [
-            {
-              text: prompt + ", realistic photo, high quality, natural lighting, everyday Canadian scene",
-              weight: 1
-            },
-            {
-              text: "blurry, distorted, text, watermark, nsfw, violence",
-              weight: -1
-            }
-          ],
-          cfg_scale: 7,
-          height: 768,
-          width: 1024,
-          samples: 1,
-          steps: 30
-        })
+        body: (() => {
+          const fd = new FormData();
+          fd.append("prompt", prompt + ", realistic photo, high quality, natural lighting, everyday Canadian scene");
+          fd.append("negative_prompt", "blurry, distorted, text, watermark, nsfw");
+          fd.append("output_format", "png");
+          fd.append("aspect_ratio", "16:9");
+          return fd;
+        })()
       }
     );
 
@@ -55,8 +45,8 @@ async function generateImage(prompt: string): Promise<string | null> {
       return null;
     }
 
-    const data = await response.json();
-    return data.artifacts[0].base64;
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer).toString("base64");
 
   } catch (error) {
     console.error("Image generation error:", error);
@@ -100,7 +90,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const taskNumber = body.taskNumber || 1;
-    const needsImage = taskNumber === 3 || taskNumber === 5;
+    const needsImage = taskNumber === 3 || taskNumber === 5 || taskNumber === 8;
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
@@ -146,10 +136,10 @@ export async function POST(request: Request) {
     if (needsImage) {
       console.log("Generating image(s) with Stability AI...");
 
-      if (taskNumber === 3 && task.image_prompt) {
+      if ((taskNumber === 3 || taskNumber === 8) && task.image_prompt) {
         const base64 = await generateImage(task.image_prompt);
         if (base64) {
-          const filename = `task3_${Date.now()}.png`;
+          const filename = `task_img_${Date.now()}.png`;
           task.image_url = await uploadImageToSupabase(base64, filename);
         }
       }

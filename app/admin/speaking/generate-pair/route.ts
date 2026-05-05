@@ -9,53 +9,68 @@ const supabase = createClient(
 );
 
 async function generateImage(prompt: string): Promise<string | null> {
+  console.log("=== generateImage called ===");
+  console.log("STABILITY_API_KEY exists:", !!process.env.STABILITY_API_KEY);
   try {
+    console.log("Calling Stability AI with prompt:", prompt.slice(0, 50));
+
+    // FIX #1: Updated to Stability AI v2beta API (v1 is deprecated)
+    // New API uses multipart/form-data and returns raw image bytes
+    const formData = new FormData();
+    formData.append(
+      "prompt",
+      prompt + ", realistic photo, high quality, natural lighting, everyday Canadian scene"
+    );
+    formData.append("negative_prompt", "blurry, distorted, text, watermark, nsfw");
+    formData.append("output_format", "png");
+    formData.append("aspect_ratio", "16:9");
+
     const response = await fetch(
-      "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
+      "https://api.stability.ai/v2beta/stable-image/generate/core",
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.STABILITY_API_KEY}`,
-          "Accept": "application/json"
+          Authorization: `Bearer ${process.env.STABILITY_API_KEY}`,
+          Accept: "image/*",
         },
-        body: JSON.stringify({
-          text_prompts: [
-            {
-              text: prompt + ", realistic photo, high quality, natural lighting, everyday Canadian scene",
-              weight: 1
-            },
-            {
-              text: "blurry, distorted, text, watermark, nsfw",
-              weight: -1
-            }
-          ],
-          cfg_scale: 7,
-          height: 768,
-          width: 1024,
-          samples: 1,
-          steps: 30
-        })
+        body: formData,
       }
     );
-    if (!response.ok) return null;
-    const data = await response.json();
-    return data.artifacts[0].base64;
+
+    // FIX #2: Log the actual error from Stability AI instead of silently returning null
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Stability AI error:", response.status, errText);
+      return null;
+    }
+
+    // v2beta returns raw image bytes — convert to base64
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer).toString("base64");
   } catch (error) {
+    console.error("generateImage exception:", error);
     return null;
   }
 }
 
 async function uploadImage(base64: string, filename: string): Promise<string | null> {
   try {
+    console.log("Uploading image to Supabase:", filename);
     const buffer = Buffer.from(base64, "base64");
     const { error } = await supabase.storage
       .from("task-images")
       .upload(filename, buffer, { contentType: "image/png", upsert: true });
-    if (error) return null;
+
+    // FIX #2 (cont.): Log upload errors explicitly
+    if (error) {
+      console.error("Supabase upload error:", error);
+      return null;
+    }
+
     const { data } = supabase.storage.from("task-images").getPublicUrl(filename);
     return data.publicUrl;
   } catch (error) {
+    console.error("uploadImage exception:", error);
     return null;
   }
 }
@@ -76,12 +91,13 @@ export async function POST(request: Request) {
     if (pairType === "3+4") {
       // Generate Task 3 content
       const task3Response = await client.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-20250514",
         max_tokens: 1024,
         system: "You are a CELPIP examiner. Return raw JSON only.",
-        messages: [{
-          role: "user",
-          content: `Generate a CELPIP Speaking Task 3 (Describe a Picture).
+        messages: [
+          {
+            role: "user",
+            content: `Generate a CELPIP Speaking Task 3 (Describe a Picture).
           Return JSON with:
           {
             "task_number": 3,
@@ -95,8 +111,9 @@ export async function POST(request: Request) {
             "sample_answer_band": 9,
             "sample_answer_notes": ["note1", "note2"],
             "image_prompt": "detailed scene description for image generation"
-          }`
-        }]
+          }`,
+          },
+        ],
       });
 
       const block3 = task3Response.content[0];
@@ -115,12 +132,13 @@ export async function POST(request: Request) {
 
       // Generate Task 4 using SAME image context
       const task4Response = await client.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-20250514",
         max_tokens: 1024,
         system: "You are a CELPIP examiner. Return raw JSON only.",
-        messages: [{
-          role: "user",
-          content: `Generate a CELPIP Speaking Task 4 (Make Predictions) that is DIRECTLY related to this image scene:
+        messages: [
+          {
+            role: "user",
+            content: `Generate a CELPIP Speaking Task 4 (Make Predictions) that is DIRECTLY related to this image scene:
           "${task3.image_prompt}"
           
           The user just described this image in Task 3. Now ask them to make predictions about it.
@@ -136,8 +154,9 @@ export async function POST(request: Request) {
             "sample_answer": "band 9 sample answer with predictions",
             "sample_answer_band": 9,
             "sample_answer_notes": ["note1", "note2"]
-          }`
-        }]
+          }`,
+          },
+        ],
       });
 
       const block4 = task4Response.content[0];
@@ -153,18 +172,20 @@ export async function POST(request: Request) {
         .from("task_groups")
         .insert({
           group_type: "3+4",
-          shared_image_url: imageUrl
+          shared_image_url: imageUrl,
         })
         .select()
         .single();
 
+      // FIX #4: Return error response if group insert fails instead of silently continuing
       if (groupError) {
         console.error("Group error:", groupError);
+        return NextResponse.json(
+          { error: "Failed to create task group", details: groupError.message },
+          { status: 500 }
+        );
       }
 
-      // Save both tasks
-      const { data: { session } } = await supabase.auth.getUser();
-      
       await supabaseUser.from("admin_tasks").insert([
         {
           task_type: "Speaking Task 3",
@@ -173,7 +194,7 @@ export async function POST(request: Request) {
           content: task3,
           section: "Speaking",
           sequence_number: 3,
-          task_group_id: group?.id
+          task_group_id: group?.id,
         },
         {
           task_type: "Speaking Task 4",
@@ -182,26 +203,26 @@ export async function POST(request: Request) {
           content: task4,
           section: "Speaking",
           sequence_number: 4,
-          task_group_id: group?.id
-        }
+          task_group_id: group?.id,
+        },
       ]);
 
       return NextResponse.json({
         success: true,
         message: "Task 3+4 pair generated with shared image!",
         group_id: group?.id,
-        image_url: imageUrl
+        image_url: imageUrl,
       });
-
     } else if (pairType === "5+6") {
       // Generate Task 5 content
       const task5Response = await client.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-20250514",
         max_tokens: 1024,
         system: "You are a CELPIP examiner. Return raw JSON only.",
-        messages: [{
-          role: "user",
-          content: `Generate a CELPIP Speaking Task 5 (Compare Two Pictures).
+        messages: [
+          {
+            role: "user",
+            content: `Generate a CELPIP Speaking Task 5 (Compare Two Pictures).
           Return JSON with:
           {
             "task_number": 5,
@@ -216,8 +237,9 @@ export async function POST(request: Request) {
             "sample_answer_notes": ["note1", "note2"],
             "image_prompt": "first scene description",
             "image_prompt_2": "second contrasting scene description"
-          }`
-        }]
+          }`,
+          },
+        ],
       });
 
       const block5 = task5Response.content[0];
@@ -228,27 +250,30 @@ export async function POST(request: Request) {
       console.log("Generating two images for Task 5+6...");
       const [base64_1, base64_2] = await Promise.all([
         generateImage(task5.image_prompt || "busy urban scene"),
-        generateImage(task5.image_prompt_2 || "quiet rural scene")
+        generateImage(task5.image_prompt_2 || "quiet rural scene"),
       ]);
 
+      // FIX #3: Use a stable timestamp to avoid filename collision
+      const ts = Date.now();
       let imageUrl1 = null;
       let imageUrl2 = null;
 
       if (base64_1) {
-        imageUrl1 = await uploadImage(base64_1, `task56_1_${Date.now()}.png`);
+        imageUrl1 = await uploadImage(base64_1, `task56_1_${ts}.png`);
       }
       if (base64_2) {
-        imageUrl2 = await uploadImage(base64_2, `task56_2_${Date.now() + 1}.png`);
+        imageUrl2 = await uploadImage(base64_2, `task56_2_${ts}_2.png`);
       }
 
       // Generate Task 6 using SAME images
       const task6Response = await client.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-20250514",
         max_tokens: 1024,
         system: "You are a CELPIP examiner. Return raw JSON only.",
-        messages: [{
-          role: "user",
-          content: `Generate a CELPIP Speaking Task 6 (Deal with a Situation) that is DIRECTLY related to these two image scenes:
+        messages: [
+          {
+            role: "user",
+            content: `Generate a CELPIP Speaking Task 6 (Deal with a Situation) that is DIRECTLY related to these two image scenes:
           Image 1: "${task5.image_prompt}"
           Image 2: "${task5.image_prompt_2}"
 
@@ -265,8 +290,9 @@ export async function POST(request: Request) {
             "sample_answer": "band 9 sample answer",
             "sample_answer_band": 9,
             "sample_answer_notes": ["note1", "note2"]
-          }`
-        }]
+          }`,
+          },
+        ],
       });
 
       const block6 = task6Response.content[0];
@@ -280,15 +306,24 @@ export async function POST(request: Request) {
       task6.image_url_2 = imageUrl2;
 
       // Create task group
-      const { data: group } = await supabaseUser
+      const { data: group, error: groupError } = await supabaseUser
         .from("task_groups")
         .insert({
           group_type: "5+6",
           shared_image_url: imageUrl1,
-          shared_image_url_2: imageUrl2
+          shared_image_url_2: imageUrl2,
         })
         .select()
         .single();
+
+      // FIX #4: Return error response if group insert fails
+      if (groupError) {
+        console.error("Group error:", groupError);
+        return NextResponse.json(
+          { error: "Failed to create task group", details: groupError.message },
+          { status: 500 }
+        );
+      }
 
       // Save both tasks
       await supabaseUser.from("admin_tasks").insert([
@@ -299,7 +334,7 @@ export async function POST(request: Request) {
           content: task5,
           section: "Speaking",
           sequence_number: 5,
-          task_group_id: group?.id
+          task_group_id: group?.id,
         },
         {
           task_type: "Speaking Task 6",
@@ -308,19 +343,18 @@ export async function POST(request: Request) {
           content: task6,
           section: "Speaking",
           sequence_number: 6,
-          task_group_id: group?.id
-        }
+          task_group_id: group?.id,
+        },
       ]);
 
       return NextResponse.json({
         success: true,
         message: "Task 5+6 pair generated with shared images!",
-        group_id: group?.id
+        group_id: group?.id,
       });
     }
 
     return NextResponse.json({ error: "Invalid pair type" }, { status: 400 });
-
   } catch (error) {
     console.error("Error:", error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
