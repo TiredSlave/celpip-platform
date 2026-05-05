@@ -8,45 +8,57 @@ export async function POST(request: Request) {
     const body = await request.json();
     const taskType = body.taskType || "Writing Task 1";
 
-    // Different prompt based on task type
-    const prompt = taskType === "Writing Task 2"
-      ? `Generate a CELPIP Writing Task 2 survey response question.
-         Return a raw JSON object with exactly these keys:
-         task_type, topic, question, opinion_options 
-         (array of 2 opposite opinions to choose from),
-         word_limit, time_limit_minutes.`
-      : `Generate a CELPIP Writing Task 1 email scenario.
-         Return a raw JSON object with exactly these keys:
-         task_type, scenario, instructions,
-         bullet_points (array of 4 strings),
-         word_limit, time_limit_minutes.`;
+    let userPrompt = "";
+
+    if (taskType === "Writing Task 2") {
+      userPrompt = `Generate a CELPIP Writing Task 2 question.
+Task 2 presents a situation where the test taker must choose between two options and explain their choice.
+Return raw JSON only:
+{
+  "task_type": "Writing Task 2",
+  "topic": "the survey or community topic title",
+  "context": "2-3 sentence background explaining the situation requiring a decision",
+  "question": "Which option do you prefer? Use specific reasons and examples to support your choice.",
+  "option_a": "first option description",
+  "option_b": "second contrasting option description",
+  "word_limit": 200,
+  "time_limit_minutes": 26,
+  "sample_answer": "A 150-200 word band 9 response that clearly chooses one option, gives 2-3 specific reasons with examples, and has a clear conclusion",
+  "sample_answer_band": 9,
+  "sample_answer_notes": ["what makes this response strong", "vocabulary used", "structure note"]
+}
+Topics: workplace policies, community programs, technology use, environmental choices, education methods, housing options, transportation choices.`;
+
+    } else {
+      userPrompt = `Generate a CELPIP Writing Task 1 email scenario.
+Task 1 requires writing an email with exactly 3 bullet points to address.
+Return raw JSON only:
+{
+  "task_type": "Writing Task 1",
+  "scenario": "the situation that requires writing an email",
+  "recipient": "who the email is addressed to",
+  "tone": "formal or semi-formal or informal",
+  "instructions": "Write an email to [recipient]. In your email:",
+  "bullet_points": ["first specific point to address", "second specific point to address", "third specific point to address"],
+  "word_limit": 150,
+  "time_limit_minutes": 27,
+  "sample_answer": "A 150-200 word band 9 email that addresses all 3 bullet points with appropriate tone and greeting/sign-off",
+  "sample_answer_band": 9,
+  "sample_answer_notes": ["what makes this email strong", "tone and vocabulary used", "structure note"]
+}
+Topics: workplace scheduling, complaints to businesses, requests for information, community issues, housing problems, service feedback.`;
+    }
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: `You are a certified CELPIP examiner. Generate realistic
-               original mock test tasks matching the official CELPIP format
-               exactly. Return raw JSON only. No markdown. No backticks.
-               No explanation. Just the JSON object.`,
-      messages: [
-  {
-    role: "user",
-    content: `Generate a CELPIP ${taskType} scenario as a JSON object with exactly these keys:
-task_type, scenario, instructions, bullet_points, word_limit, time_limit_minutes,
-sample_answer (a band 9-10 model answer that addresses all bullet points),
-sample_answer_band (the band score of the sample, should be 9 or 10),
-sample_answer_notes (2-3 specific things that make this a high band answer).`
-  }
-]
+      max_tokens: 2000,
+      system: `You are a certified CELPIP examiner. Generate realistic original mock test tasks matching the official CELPIP format exactly. Return raw JSON only. No markdown. No backticks. No explanation.`,
+      messages: [{ role: "user", content: userPrompt }]
     });
 
     const block = response.content[0];
     const text = block.type === "text" ? block.text : "";
-    const cleaned = text
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
-
+    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
     const task = JSON.parse(cleaned);
     return NextResponse.json(task);
 

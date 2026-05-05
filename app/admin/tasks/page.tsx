@@ -30,10 +30,10 @@ export default function TasksPage() {
   const taskTypes = [
   "Writing Task 1",
   "Writing Task 2",
-  "Reading for Information",
-  "Reading for Viewpoints",
-  "Reading Correspondence",
-  "Reading to Apply Information",
+  "Task 3: Information",
+  "Task 4: Viewpoints",
+  "Task 1: Correspondence",
+  "Task 2: to Apply Information",
   "Speaking Task 1",
   "Speaking Task 2",
   "Speaking Task 3",
@@ -42,12 +42,12 @@ export default function TasksPage() {
   "Speaking Task 6",
   "Speaking Task 7",
   "Speaking Task 8",
+  "Listening - Problem Solving",
   "Listening - Daily Life Conversation",
-  "Listening - Workplace Discussion",
-  "Listening - Phone Conversation",
-  "Listening - News Report",
-  "Listening - Announcement",
-  "Listening - Interview"
+  "Listening - Listening for Information",
+  "Listening - News Item",
+  "Listening - Discussion",
+  "Listening - Viewpoints"
 ];
 
   useEffect(() => {
@@ -218,12 +218,12 @@ export default function TasksPage() {
     );
   } else if (module === "Listening") {
     options.push(
-      { value: "Listening - Daily Life Conversation", label: "Daily Life Conversation", description: "Everyday topics between people" },
-      { value: "Listening - Workplace Discussion", label: "Workplace Discussion", description: "Professional work conversations" },
-      { value: "Listening - Phone Conversation", label: "Phone Conversation", description: "Telephone dialogue" },
-      { value: "Listening - News Report", label: "News Report", description: "Radio or TV news style" },
-      { value: "Listening - Announcement", label: "Announcement", description: "Public announcements" },
-      { value: "Listening - Interview", label: "Interview", description: "Job or media interview" }
+      { value: "Listening - Problem Solving", label: "Part 1 — Problem Solving", description: "2 speakers solving a problem (8 questions)" },
+      { value: "Listening - Daily Life Conversation", label: "Part 2 — Daily Life Conversation", description: "Short casual conversation (5 questions)" },
+      { value: "Listening - Listening for Information", label: "Part 3 — Listening for Information", description: "Instructions or directions (6 questions)" },
+      { value: "Listening - News Item", label: "Part 4 — News Item", description: "Formal news report (5 questions)" },
+      { value: "Listening - Discussion", label: "Part 5 — Discussion", description: "Multiple speakers, opinions (8 questions)" },
+      { value: "Listening - Viewpoints", label: "Part 6 — Viewpoints", description: "Speaker defending a viewpoint (6 questions)" }
     );
   }
 
@@ -637,9 +637,55 @@ export default function TasksPage() {
             <h3 className="font-bold text-gray-800 mb-2">
               {selectedTask.content.title}
             </h3>
-            <p className="text-gray-700 text-sm leading-relaxed">
-              {selectedTask.content.passage}
-            </p>
+
+            {/* Part 2 - HTML Visual Document */}
+            {selectedTask.content.html_content && (
+              <div
+                className="mt-2 border rounded-lg overflow-auto"
+                style={{backgroundColor: "white", color: "#1a1a1a"}}
+                dangerouslySetInnerHTML={{ __html: selectedTask.content.html_content }}
+              />
+            )}
+
+            {/* Part 1 - Email Correspondence */}
+            {selectedTask.content.main_message && (
+              <div className="space-y-3 mt-2">
+                <div className="bg-white border rounded-lg p-3">
+                  <p className="text-xs text-gray-500">From: {selectedTask.content.main_message.from}</p>
+                  <p className="text-xs text-gray-500">To: {selectedTask.content.main_message.to}</p>
+                  <p className="text-xs font-bold text-gray-700">Subject: {selectedTask.content.main_message.subject}</p>
+                  <p className="text-sm text-gray-700 mt-2">{selectedTask.content.main_message.body}</p>
+                </div>
+                {selectedTask.content.response_message && (
+                  <div className="bg-white border rounded-lg p-3">
+                    <p className="text-xs text-gray-500">From: {selectedTask.content.response_message.from}</p>
+                    <p className="text-xs text-gray-500">To: {selectedTask.content.response_message.to}</p>
+                    <p className="text-xs font-bold text-gray-700">Subject: {selectedTask.content.response_message.subject}</p>
+                    <p className="text-sm text-gray-700 mt-2">{selectedTask.content.response_message.body}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Part 3/4 - Regular Passage */}
+            {selectedTask.content.passage && (
+              <p className="text-gray-700 text-sm leading-relaxed mt-2">
+                {selectedTask.content.passage}
+              </p>
+            )}
+
+            {/* Part 4 - Viewpoints */}
+            {selectedTask.content.viewpoints && (
+              <div className="space-y-2 mt-2">
+                <p className="text-xs text-gray-500 font-bold">Topic: {selectedTask.content.topic}</p>
+                {selectedTask.content.viewpoints.map((v: any, i: number) => (
+                  <div key={i} className="bg-white border rounded-lg p-3">
+                    <p className="text-xs font-bold text-gray-700">{v.name} — {v.role}</p>
+                    <p className="text-sm text-gray-700 mt-1">{v.opinion}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div>
             <p className="font-semibold text-gray-700 mb-2">
