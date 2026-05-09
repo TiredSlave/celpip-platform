@@ -20,12 +20,12 @@ export async function POST(request: Request) {
       return await generatePart2Task(questionCount);
     }
 
-    let systemPrompt = "You are a certified CELPIP examiner. Return raw JSON only. No markdown. No backticks. No explanation.";
+    let systemPrompt = "You are a certified CELPIP examiner. Return raw JSON only. No markdown. No backticks. No explanation. Follow the JSON structure EXACTLY as specified. Do not add extra keys or change the structure.";
     let userPrompt = "";
 
     if (readingType === "Reading Correspondence") {
       userPrompt = `Generate a CELPIP Reading Correspondence task (Part 1).
-Part 1 has TWO emails/messages on an everyday Canadian topic.
+Part 1 has ONE main email AND a partial response email with fill-in-the-blank gaps.
 Return JSON:
 {
   "reading_type": "Reading Correspondence",
@@ -34,28 +34,40 @@ Return JSON:
     "from": "sender full name",
     "to": "recipient full name",
     "subject": "email subject line",
-    "body": "200-250 word realistic Canadian everyday email. Use paragraphs. Cover a practical situation like workplace, community event, service inquiry, housing, or appointment."
-  },
-  "response_message": {
-    "from": "responder full name",
-    "to": "original sender full name",
-    "subject": "Re: same subject",
-    "body": "150-200 word realistic reply email. Use paragraphs. Address the points raised in the main email."
+    "body": "200-250 word realistic Canadian everyday email. Use paragraphs."
   },
   "questions": [
     {
       "id": 1,
-      "source": "main",
       "question": "question about the main email",
       "options": {"A": "option", "B": "option", "C": "option", "D": "option"},
       "correct_answer": "A",
-      "explanation": "why this is correct based on the email"
+      "explanation": "why this is correct",
+      "option_explanations": {"A": "why A", "B": "why B", "C": "why C", "D": "why D"}
     }
-  ]
+  ],
+  "fill_in_blank": {
+    "instruction": "Here is a response to the message. Complete the response by filling in the blanks. Select the best choice for each blank from the dropdown.",
+    "from": "responder full name",
+    "to": "original sender name",
+    "subject": "Re: same subject",
+    "text_with_blanks": "Full 150-200 word response email. Insert exactly 5 blanks as [BLANK_7] [BLANK_8] [BLANK_9] [BLANK_10] [BLANK_11] where vocabulary words fit naturally.",
+    "blanks": [
+      {
+        "id": 7,
+        "options": {"A": "option", "B": "option", "C": "option", "D": "option"},
+        "correct_answer": "A",
+        "explanation": "why this word fits here",
+        "option_explanations": {"A": "why A", "B": "why B", "C": "why C", "D": "why D"}
+      }
+    ]
+  }
 }
-Generate exactly ${questionCount} questions total.
-Questions 1-6: about the main email (purpose, tone, details, inference).
-Questions 7-11: about the response email (purpose, tone, details, missing words).
+Generate exactly 6 MCQ questions (ids 1-6) about the main email.
+Generate exactly 5 fill-in-blank items (ids 7-11) in the response email.
+Total = 11 items. Blanks test vocabulary in context.
+CRITICAL: Do NOT include a "response_message" key. Use ONLY "fill_in_blank" for the response.
+The fill_in_blank.text_with_blanks must contain exactly 5 placeholders: [BLANK_7] [BLANK_8] [BLANK_9] [BLANK_10] [BLANK_11].
 Topics: workplace scheduling, community programs, rental inquiries, service complaints, event planning.`;
 
     } else if (readingType === "Reading for Information") {
@@ -84,29 +96,40 @@ Generate exactly ${questionCount} questions. Mix of:
 
     } else if (readingType === "Reading for Viewpoints") {
       userPrompt = `Generate a CELPIP Reading for Viewpoints task (Part 4).
-Part 4 is a SINGLE article that presents multiple viewpoints on a controversial Canadian topic.
-The article should have different people's opinions woven throughout — NOT separate paragraphs per person.
+Part 4 has a main article with multiple viewpoints AND a fill-in-blank summary paragraph.
 Return JSON:
 {
   "reading_type": "Reading for Viewpoints",
   "title": "article title",
-  "passage": "400-500 word article presenting multiple viewpoints. Structure: intro paragraph presenting the issue, then 3-4 paragraphs each featuring a named person (with role/background) expressing their opinion with reasons. End with a brief concluding paragraph. Use realistic Canadian names and roles. Topic examples: urban development, public transit, remote work policies, environmental regulations, immigration, housing costs, technology in schools.",
+  "passage": "400-500 word article presenting multiple viewpoints. Structure: intro paragraph presenting the issue, then 3-4 paragraphs each featuring a named person (with role/background) expressing their opinion with reasons. End with a brief concluding paragraph.",
   "questions": [
     {
       "id": 1,
       "question": "question about the viewpoints",
       "options": {"A": "option", "B": "option", "C": "option", "D": "option"},
       "correct_answer": "A",
-      "explanation": "which part of the passage supports this answer"
+      "explanation": "which part supports this answer",
+      "option_explanations": {"A": "why A", "B": "why B", "C": "why C", "D": "why D"}
     }
-  ]
+  ],
+  "fill_in_blank": {
+    "instruction": "Complete the summary by filling in the blanks. Select the best choice for each blank from the dropdown.",
+    "text_with_blanks": "100-120 word summary of the article with exactly 5 blanks as [BLANK_6] [BLANK_7] [BLANK_8] [BLANK_9] [BLANK_10] where vocabulary words fit naturally.",
+    "blanks": [
+      {
+        "id": 6,
+        "options": {"A": "option", "B": "option", "C": "option", "D": "option"},
+        "correct_answer": "A",
+        "explanation": "why this word fits here",
+        "option_explanations": {"A": "why A", "B": "why B", "C": "why C", "D": "why D"}
+      }
+    ]
+  }
 }
-Generate exactly ${questionCount} questions testing:
-- Who holds which opinion
-- Areas of agreement or disagreement between people
-- The reason someone gives for their opinion
-- Inference about someone's attitude
-- Identifying the main purpose of the article`;
+Generate exactly 5 MCQ questions (ids 1-5) about the viewpoints article.
+Generate exactly 5 fill-in-blank items (ids 6-10) in the summary paragraph.
+Total = 10 items. Blanks test vocabulary in context.
+Topics: urban development, public transit, remote work, environmental regulations, housing costs.`;
     }
 
     const response = await client.messages.create({

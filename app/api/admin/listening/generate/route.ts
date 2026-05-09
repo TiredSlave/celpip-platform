@@ -209,8 +209,9 @@ Use 8-12 sentences. Formal Canadian broadcast news style. Include specific names
 Use 10-14 sentences. Structured argument with evidence and examples.`;
     } else if (listeningType === "Discussion") {
       dialogueInstruction = `Create a discussion with exactly 3 speakers: "Host", "Alex", "Maria".
-Use 20-25 exchanges. Host moderates. Alex and Maria have different opinions.
-Include natural agreements, disagreements, and building on each other's points.`;
+Use 12-14 exchanges only (keep total under 3 minutes of speech = ~400 words).
+Host asks 3-4 short questions. Alex and Maria each give 2-3 responses of 1-2 sentences each.
+Keep each response SHORT — maximum 2 sentences per turn.`;
     } else {
       dialogueInstruction = `Create a natural conversation between 2 speakers named "Sarah" and "David".
 Use ${listeningType === "Daily Life Conversation" ? "8-10" : "12-16"} exchanges.
@@ -220,7 +221,7 @@ Include natural filler words (um, well, actually), contractions, and short react
     // Step 1: Generate dialogue and questions with Claude
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 4000,
+      max_tokens: 6000,
       system: "You are a certified CELPIP examiner. Generate realistic CELPIP Listening test content. Return raw JSON only. No markdown. No backticks.",
       messages: [{
         role: "user",

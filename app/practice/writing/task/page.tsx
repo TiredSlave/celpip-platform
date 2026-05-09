@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase } from "../../../lib/supabase";
 
 type WritingTask = {
   id: string;
@@ -89,7 +89,6 @@ export default function WritingPage() {
 
   async function handleSubmit() {
     if (!currentTask || !response.trim()) return;
-    setSubmitted(true);
     setEvaluating(true);
     if (timerRef.current) clearInterval(timerRef.current);
     try {
@@ -215,7 +214,7 @@ export default function WritingPage() {
                   className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">
                   {paused ? "Resume" : "Pause"}
                 </button>
-                <button onClick={handleSubmit} disabled={submitted || !response.trim()}
+                <button onClick={handleSubmit} disabled={evaluating || !response.trim()}
                   className="px-5 py-1.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg text-sm transition disabled:opacity-50">
                   {evaluating ? "⏳ Evaluating..." : "EVALUATE"}
                 </button>
@@ -225,8 +224,12 @@ export default function WritingPage() {
               <textarea
                 value={response}
                 onChange={e => setResponse(e.target.value)}
-                disabled={submitted}
+                disabled={evaluating}
                 placeholder="Type your response here..."
+                spellCheck={true}
+                lang="en-CA"
+                autoCorrect="off"
+                autoCapitalize="sentences"
                 className="w-full h-full resize-none bg-white border border-gray-200 rounded-xl p-5 text-gray-800 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-50"
               />
             </div>

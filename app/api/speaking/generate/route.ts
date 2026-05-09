@@ -155,6 +155,59 @@ export async function POST(request: Request) {
       }
 
       if (taskNumber === 5) {
+    return `Generate a CELPIP Speaking Task 5 (Comparing and Persuading).
+
+This is a two-part task:
+- Part A: Test taker sees 2 options with images, has 60 seconds to choose one
+- Part B: If no choice made, system assigns one. Then 60 seconds to speak persuading someone why their choice is better.
+
+Generate a realistic Canadian scenario where someone chooses between two options.
+Each option has an IMAGE and specific details (price, features, etc).
+
+Return ONLY raw JSON:
+{
+  "task_number": 5,
+  "task_type": "Comparing and Persuading",
+  "scenario": "Brief scenario description e.g. You and a friend are choosing a gym membership.",
+  "person_to_persuade": "your friend / your boss / your family member",
+  "selection_time_seconds": 60,
+  "speaking_time_seconds": 60,
+  "option_a": {
+    "label": "Option A name e.g. Downtown Fitness Club",
+    "image_prompt": "Detailed realistic Canadian scene for this option",
+    "details": {
+      "price": "$50/month",
+      "feature_1": "Olympic pool",
+      "feature_2": "24/7 access",
+      "feature_3": "Free parking"
+    }
+  },
+  "option_b": {
+    "label": "Option B name e.g. Community Recreation Centre",
+    "image_prompt": "Detailed realistic Canadian scene for this option",
+    "details": {
+      "price": "$30/month",
+      "feature_1": "Group fitness classes",
+      "feature_2": "Weekday only",
+      "feature_3": "No parking"
+    }
+  },
+  "tips": [
+    "Choose quickly — you only have 60 seconds to select",
+    "Use comparative language: cheaper, more convenient, better value",
+    "Acknowledge the other option politely before explaining your choice",
+    "Give at least 2 specific reasons with details from the images",
+    "Address your response to the person e.g. Hi [name], I know you prefer..."
+  ],
+  "sample_answer": {
+    "chosen_option": "A",
+    "response": "130-150 word natural spoken band 9 response persuading the listener. Must compare both options and give specific reasons.",
+    "band": 9
+  }
+}`;
+  }
+
+  if (taskNumber === 5 && false) {
         const [base64_1, base64_2] = await Promise.all([
           generateImage(task.image_prompt || "busy urban scene in Canada"),
           generateImage(task.image_prompt_2 || "quiet rural scene in Canada")

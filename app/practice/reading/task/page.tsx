@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
-import { supabase } from "../lib/supabase";
+import { useEffect, useState, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { supabase } from "../../../lib/supabase";
 
 type Question = {
   id: number;
@@ -18,6 +19,22 @@ type ReadingTask = {
     passage?: string;
     main_message?: { from: string; to: string; subject: string; body: string };
     response_message?: { from: string; to: string; subject: string; body: string };
+    fill_in_blank?: {
+      instruction: string;
+      from?: string;
+      to?: string;
+      subject?: string;
+      text_with_blanks: string;
+      blanks: { id: number; options: Record<string,string>; correct_answer: string; explanation: string; option_explanations?: Record<string,string> }[];
+    };
+    fill_in_blank?: {
+      instruction: string;
+      from?: string;
+      to?: string;
+      subject?: string;
+      text_with_blanks: string;
+      blanks: { id: number; options: Record<string,string>; correct_answer: string; explanation: string; option_explanations?: Record<string,string> }[];
+    };
     html_content?: string;
     viewpoints?: { name: string; role: string; opinion: string }[];
     topic?: string;
@@ -32,7 +49,9 @@ const READING_PARTS = [
   { key: "Reading for Viewpoints",       label: "Part 4", title: "Reading for Viewpoints",       instruction: "Read the following viewpoints" },
 ];
 
-export default function ReadingPage() {
+function ReadingContent() {
+  const searchParams = useSearchParams();
+  const taskId = searchParams.get("taskId");
   const [tasks, setTasks] = useState<ReadingTask[]>([]);
   const [currentPartIndex, setCurrentPartIndex] = useState(0);
   const [currentTask, setCurrentTask] = useState<ReadingTask | null>(null);
@@ -72,6 +91,16 @@ export default function ReadingPage() {
 
   async function loadTasks() {
     setLoading(true);
+    if (taskId) {
+      const { data } = await supabase.from("admin_tasks").select("*").eq("id", taskId).single();
+      if (data) {
+        setCurrentTask(data);
+        const idx = READING_PARTS.findIndex(p => p.key === data.task_type);
+        if (idx >= 0) setCurrentPartIndex(idx);
+      }
+      setLoading(false);
+      return;
+    }
     const { data } = await supabase
       .from("admin_tasks")
       .select("*")
@@ -97,20 +126,30 @@ export default function ReadingPage() {
   function handleSubmit() {
     if (!currentTask) return;
     const questions = currentTask.content.questions || [];
+    const blanks = currentTask.content.fill_in_blank?.blanks || [];
     let correct = 0;
     questions.forEach(q => { if (answers[q.id] === q.correct_answer) correct++; });
+    blanks.forEach((b: any) => { if (answers[b.id] === b.correct_answer) correct++; });
+    const total = questions.length + blanks.length;
     if (timerRef.current) clearInterval(timerRef.current);
-    // Save result and redirect to results page
+    setSubmitted(true);
     const result = {
       taskId: currentTask.id,
       taskType: currentTask.task_type,
       score: correct,
-      total: questions.length,
+      total,
       answers,
-      questions,
+      questions: [...questions, ...blanks.map((b: any) => ({
+        id: b.id,
+        question: `Blank ${b.id}`,
+        options: b.options,
+        correct_answer: b.correct_answer,
+        explanation: b.explanation,
+        option_explanations: b.option_explanations,
+      }))],
     };
     sessionStorage.setItem("celpip_result", JSON.stringify(result));
-    window.location.href = "/results";
+    window.location.href = "/practice/results";
   }
 
   const currentPart = READING_PARTS[currentPartIndex];
@@ -217,7 +256,7 @@ export default function ReadingPage() {
                   <p className="text-xs text-gray-500 mb-3">Subject: <span className="text-gray-700 font-semibold">{currentTask.content.main_message.subject}</span></p>
                   <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">{currentTask.content.main_message.body}</p>
                 </div>
-                {currentTask.content.response_message && (
+                {currentTask.content.response_message && !currentTask.content.fill_in_blank && (
                   <div className="border border-gray-200 rounded-lg p-5 bg-gray-50">
                     <p className="text-xs text-gray-500 mb-1">From: <span className="text-gray-700">{currentTask.content.response_message.from}</span></p>
                     <p className="text-xs text-gray-500 mb-1">To: <span className="text-gray-700">{currentTask.content.response_message.to}</span></p>
@@ -229,7 +268,8 @@ export default function ReadingPage() {
             )}
 
             {currentTask.content.html_content && (
-              <div className="border border-gray-200 rounded-lg overflow-auto bg-white p-4 text-sm"
+              <div className="border border-gray-200 rounded-lg overflow-auto bg-white p-4 text-sm reading-html-content"
+                style={{color: "#1a1a1a"}}
                 dangerouslySetInnerHTML={{ __html: currentTask.content.html_content }} />
             )}
 
@@ -297,7 +337,58 @@ export default function ReadingPage() {
                 </div>
               ))}
             </div>
-            {!submitted && (
+            {/* Fill in blank section */}
+            {currentTask.content.fill_in_blank && (
+              <div className="mt-8 border-t-2 border-gray-200 pt-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-3">
+                  {currentTask.content.fill_in_blank.instruction}
+                </h3>
+                {currentTask.content.fill_in_blank.from && (
+                  <div className="text-xs text-gray-500 mb-3 bg-white border border-gray-200 rounded-lg p-3">
+                    <div>From: <span className="text-gray-700">{currentTask.content.fill_in_blank.from}</span></div>
+                    <div>To: <span className="text-gray-700">{currentTask.content.fill_in_blank.to}</span></div>
+                    <div>Subject: <span className="text-gray-700 font-semibold">{currentTask.content.fill_in_blank.subject}</span></div>
+                  </div>
+                )}
+                <div className="bg-white border border-gray-200 rounded-xl p-5 text-sm text-gray-800 leading-loose">
+                  {currentTask.content.fill_in_blank.text_with_blanks?.split(/(\[BLANK_\d+\])/).map((part: string, idx: number) => {
+                    const match = part.match(/\[BLANK_(\d+)\]/);
+                    if (match) {
+                      const blankId = parseInt(match[1]);
+                      const blank = currentTask.content.fill_in_blank.blanks?.find((b: any) => b.id === blankId);
+                      if (!blank) return <span key={idx}>{part}</span>;
+                      const isCorrect = submitted && answers[blankId] === blank.correct_answer;
+                      const isWrong = submitted && answers[blankId] && answers[blankId] !== blank.correct_answer;
+                      return (
+                        <select key={idx}
+                          value={answers[blankId] || ""}
+                          onChange={e => !submitted && setAnswers(prev => ({ ...prev, [blankId]: e.target.value }))}
+                          disabled={submitted}
+                          className={`inline-block mx-1 px-2 py-0.5 rounded border text-sm font-medium focus:outline-none focus:ring-1 focus:ring-blue-400 ${
+                            isCorrect ? "border-green-500 bg-green-50 text-green-800"
+                            : isWrong ? "border-red-400 bg-red-50 text-red-800"
+                            : "border-blue-300 bg-blue-50 text-blue-800"
+                          }`}>
+                          <option value="" disabled>{blankId}....</option>
+                          {Object.entries(blank.options as Record<string,string>).map(([k, v]) => (
+                            <option key={k} value={k}>{k}. {v}</option>
+                          ))}
+                        </select>
+                      );
+                    }
+                    return <span key={idx}>{part}</span>;
+                  })}
+                </div>
+                {submitted && currentTask.content.fill_in_blank.blanks?.map((blank: any) => (
+                  <div key={blank.id} className="mt-2 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2 text-xs text-yellow-800">
+                    <span className="font-bold">Blank {blank.id}:</span> Correct: <span className="font-bold">{blank.correct_answer}. {blank.options[blank.correct_answer]}</span> — {blank.explanation}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Fill in blank section */}
+                        {!submitted && (
               <button onClick={handleSubmit}
                 className="mt-8 w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition">
                 Submit Answers
@@ -307,5 +398,17 @@ export default function ReadingPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ReadingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <ReadingContent />
+    </Suspense>
   );
 }

@@ -24,3 +24,13 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Reading Task 2 HTML content override */
+.reading-html-content * {
+  color: #1a1a1a !important;
+  opacity: 1 !important;
+}
+.reading-html-content th {
+  color: white !important;
+  background-color: #2563eb !important;
+}

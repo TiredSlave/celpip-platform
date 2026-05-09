@@ -87,7 +87,7 @@ export default function Navbar() {
     router.push("/login");
   }
 
-  const isPracticeActive = ["/writing", "/reading", "/speaking", "/listening"].some(p => pathname?.startsWith(p));
+  const isPracticeActive = ["/practice/writing/task", "/practice/reading/task", "/practice/speaking/task", "/practice/listening/task"].some(p => pathname?.startsWith(p));
   const colors = SECTION_COLORS[activeSection];
 
   return (

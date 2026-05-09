@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { supabase } from "../lib/supabase";
+import { supabase } from "../../../lib/supabase";
 declare global { interface Window { __currentAudio?: HTMLAudioElement; } }
 type Question = {
   id: number;
@@ -372,7 +372,7 @@ function ListeningContent() {
       taskId: currentTask.id, taskType: currentTask.task_type,
       score: correct, total: questions.length, answers, questions,
     }));
-    window.location.href = "/results";
+    window.location.href = "/practice/results";
   }
 
   function getCurrentQuestions() {
@@ -497,6 +497,10 @@ function ListeningContent() {
                   autoPlay={userInteracted}
                 />
                 <div className="border border-gray-100 rounded-lg p-4 bg-gray-50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold px-2 py-1 rounded-full bg-orange-100 text-orange-700">{currentPart.title}</span>
+                    <span className="text-xs text-gray-400">{currentTask.content.audio_length}</span>
+                  </div>
                   <h3 className="font-bold text-gray-900 mb-1">{currentTask.content.title}</h3>
                   <p className="text-sm text-gray-600">{currentTask.content.part_description}</p>
                 </div>
@@ -616,6 +620,10 @@ function ListeningContent() {
               cacheKey={currentTask.id}
             />
             <div className="border border-gray-100 rounded-lg p-4 bg-gray-50">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold px-2 py-1 rounded-full bg-orange-100 text-orange-700">{currentPart.title}</span>
+                <span className="text-xs text-gray-400">{currentTask.content.audio_length}</span>
+              </div>
               <h3 className="font-bold text-gray-900 mb-1">{currentTask.content.title}</h3>
               <p className="text-sm text-gray-600">{currentTask.content.part_description}</p>
             </div>

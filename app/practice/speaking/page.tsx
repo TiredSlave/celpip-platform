@@ -20,6 +20,12 @@ export default function SpeakingPracticePage() {
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
   const [filter, setFilter] = useState(searchParams.get("filter") || "all");
+
+  // Sync filter when URL changes (e.g. clicking navbar links)
+  useEffect(() => {
+    const f = searchParams.get("filter") || "all";
+    setFilter(f);
+  }, [searchParams]);
   useEffect(() => { loadTasks(); }, []);
   async function loadTasks() {
     setLoading(true);
@@ -40,7 +46,7 @@ export default function SpeakingPracticePage() {
       : filtered.length === 0 ? <div className="text-center py-20 bg-white rounded-xl border border-gray-200"><div className="text-5xl mb-4">📭</div><h2 className="text-xl font-bold text-gray-800 mb-2">No tasks available</h2></div>
       : <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filtered.map(task => (
-            <Link key={task.id} href={`/speaking?taskId=${task.id}`} className="group bg-white border border-purple-100 rounded-xl p-6 hover:shadow-md transition-all hover:-translate-y-0.5">
+            <Link key={task.id} href={`/practice/speaking/task?taskId=${task.id}`} className="group bg-white border border-purple-100 rounded-xl p-6 hover:shadow-md transition-all hover:-translate-y-0.5">
               <div className="flex items-start justify-between mb-3">
                 <span className="text-xs font-bold px-2 py-1 rounded-full bg-purple-100 text-purple-700">{task.task_type}</span>
                 <span className={`text-xs font-bold px-2 py-1 rounded-full ${task.difficulty === "hard" ? "bg-red-100 text-red-700" : task.difficulty === "easy" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{task.difficulty}</span>

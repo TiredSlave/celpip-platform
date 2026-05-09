@@ -3,7 +3,7 @@ import { usePathname } from "next/navigation";
 import Navbar from "./Navbar";
 
 // Task pages that use full-screen layout — no navbar
-const HIDE_NAVBAR = ["/writing", "/reading", "/speaking", "/listening", "/admin"];
+const HIDE_NAVBAR = ["/practice/writing/task", "/practice/reading/task", "/practice/speaking/task", "/practice/listening/task", "/admin"];
 
 export default function NavbarWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
