@@ -195,8 +195,8 @@ export default function TasksPage() {
 
   if (module === "Writing") {
     options.push(
-      { value: "Writing Task 1", label: "Task 1 — Write an Email", description: "150 words, 27 minutes" },
-      { value: "Writing Task 2", label: "Task 2 — Respond to Survey", description: "200 words, 26 minutes" }
+      { value: "Writing Task 1", label: "Task 1 — Write an Email", description: "150-200 words, 26 minutes" },
+      { value: "Writing Task 2", label: "Task 2 — Respond to Survey", description: "150-200 words, 27 minutes" }
     );
   } else if (module === "Reading") {
     options.push(
@@ -212,7 +212,7 @@ export default function TasksPage() {
       { value: "Speaking Task 3", label: "Task 3 — Describe a Picture", description: "30s prep, 60s speak" },
       { value: "Speaking Task 4", label: "Task 4 — Make Predictions", description: "30s prep, 60s speak" },
       { value: "Speaking Task 5", label: "Task 5 — Compare Pictures", description: "30s prep, 60s speak" },
-      { value: "Speaking Task 6", label: "Task 6 — Deal with a Situation", description: "30s prep, 60s speak" },
+      { value: "Speaking Task 6", label: "Task 6 — Deal with a Situation", description: "60s prep, 60s speak" },
       { value: "Speaking Task 7", label: "Task 7 — Express Opinion", description: "30s prep, 60s speak" },
       { value: "Speaking Task 8", label: "Task 8 — Unusual Situation", description: "30s prep, 60s speak" }
     );
@@ -250,8 +250,7 @@ export default function TasksPage() {
     Generate Speaking Task Pair
   </h2>
   <p className="text-sm text-gray-500 mb-4">
-    Tasks 3+4 share one image. Tasks 5+6 share two images.
-    Generate them together to ensure they are related.
+    Tasks 3+4 share one image. Generate them together to ensure they are related.
   </p>
   <div className="grid grid-cols-3 gap-4 mb-4">
     <div>
@@ -283,7 +282,7 @@ export default function TasksPage() {
         onChange={e => setDifficulty(e.target.value)}
         className="w-full p-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400"
       >
-        <option value="easy">Easy (Band 4-6)</option>
+        <option value="ea sy">Easy (Band 4-6)</option>
         <option value="medium">Medium (Band 7-8)</option>
         <option value="hard">Hard (Band 9-12)</option>
       </select>
@@ -301,7 +300,7 @@ export default function TasksPage() {
     </div>
   </div>
   <p className="text-xs text-gray-400">
-    This will generate 2 tasks at once with shared image(s).
+    This will generate Tasks 3+4 together with a shared image.
     May take 30-60 seconds.
   </p>
 </div>
@@ -719,77 +718,303 @@ export default function TasksPage() {
       )}
 
       {/* Speaking Task Preview */}
-      {selectedTask.task_type.includes("Speaking") && (
-        <div className="space-y-4">
-          <div className="bg-purple-50 rounded-lg p-4">
-            <p className="font-semibold text-gray-700 mb-1">Situation:</p>
-            <p className="text-gray-700">{selectedTask.content.situation}</p>
-          </div>
-          {/* Task 3 - Single Image */}
-          {selectedTask.content.image_url && (
-            <div className="mb-2">
-              <p className="font-semibold text-gray-700 mb-2">Task Image:</p>
-              <img src={selectedTask.content.image_url} alt="Task image" className="w-full rounded-lg shadow" style={{maxHeight: "400px", objectFit: "cover"}} />
-            </div>
-          )}
-          {/* Task 5 - Two Images */}
-          {selectedTask.content.image_url_1 && (
-            <div className="mb-2">
-              <p className="font-semibold text-gray-700 mb-2">Comparison Images:</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-gray-500 mb-1 text-center">Image 1</p>
-                  <img src={selectedTask.content.image_url_1} alt="Image 1" className="w-full rounded-lg shadow" style={{height: "250px", objectFit: "cover"}} />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-1 text-center">Image 2</p>
-                  <img src={selectedTask.content.image_url_2} alt="Image 2" className="w-full rounded-lg shadow" style={{height: "250px", objectFit: "cover"}} />
-                </div>
-              </div>
-            </div>
-          )}
-          <div>
-            <p className="font-semibold text-gray-700 mb-1">Task:</p>
-            <p className="text-gray-800">{selectedTask.content.prompt}</p>
-          </div>
-          <div className="flex gap-4 text-sm text-gray-500">
-            <span>Prep: {selectedTask.content.preparation_time_seconds}s</span>
-            <span>Speaking: {selectedTask.content.speaking_time_seconds}s</span>
-          </div>
+{selectedTask.task_type.includes("Speaking") && (
+  <div className="space-y-4">
 
-          {/* Sample Answer */}
-          {selectedTask.content.sample_answer && (
-            <div className="border-t pt-4">
-              <div className="flex items-center gap-2 mb-2">
-                <h3 className="font-bold text-green-700">Sample Answer</h3>
-                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">
-                  Band {selectedTask.content.sample_answer_band}
-                </span>
+    {/* Situation */}
+    <div className="bg-purple-50 rounded-lg p-4">
+      <p className="font-semibold text-gray-700 mb-1">Situation:</p>
+      <p className="text-gray-700">{selectedTask.content.situation}</p>
+    </div>
+
+    {/* Task 3 - Single Image */}
+    {selectedTask.content.image_url && (
+      <div className="mb-2">
+        <p className="font-semibold text-gray-700 mb-2">Task Image:</p>
+        <img
+          src={selectedTask.content.image_url}
+          alt="Task image"
+          className="w-full rounded-lg shadow"
+          style={{ maxHeight: "400px", objectFit: "cover" }}
+        />
+      </div>
+    )}
+
+    {/* Task 5 - Two Images + Full Comparison Preview */}
+    {selectedTask.task_type === "Speaking Task 5" && (
+      <div className="space-y-3">
+        {/* Two Images */}
+        {/* Two Images */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs text-gray-500 mb-1 text-center font-bold">Picture 1</p>
+            {selectedTask.content.image_url_1 ? (
+              <img
+                src={selectedTask.content.image_url_1}
+                alt="Image 1"
+                className="w-full rounded-lg shadow"
+                style={{ height: "220px", objectFit: "cover" }}
+              />
+            ) : (
+              <div className="w-full rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 text-xs text-center p-4"
+                style={{ height: "220px" }}>
+                <span className="text-2xl mb-2">🖼️</span>
+                <span>Image not generated</span>
+                <span className="mt-1 text-gray-300">Stability AI credits exhausted</span>
               </div>
-              <div className="bg-green-50 rounded-lg p-4 mb-3">
-                <p className="text-gray-700 text-sm italic">
-                  "{selectedTask.content.sample_answer}"
-                </p>
+            )}
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-1 text-center font-bold">Picture 2</p>
+            {selectedTask.content.image_url_2 ? (
+              <img
+                src={selectedTask.content.image_url_2}
+                alt="Image 2"
+                className="w-full rounded-lg shadow"
+                style={{ height: "220px", objectFit: "cover" }}
+              />
+            ) : (
+              <div className="w-full rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 text-xs text-center p-4"
+                style={{ height: "220px" }}>
+                <span className="text-2xl mb-2">🖼️</span>
+                <span>Image not generated</span>
+                <span className="mt-1 text-gray-300">Stability AI credits exhausted</span>
               </div>
-              {selectedTask.content.sample_answer_notes && (
-                <div>
-                  <p className="font-semibold text-gray-700 text-sm mb-1">
-                    Why this is a high band answer:
+            )}
+          </div>
+        </div>
+
+        {/* Prompt */}
+        <div className="bg-purple-50 rounded-lg p-3">
+          <p className="font-semibold text-gray-700 text-sm mb-1">Task:</p>
+          <p className="text-gray-700 text-sm">{selectedTask.content.prompt}</p>
+        </div>
+
+        {/* Comparison Points */}
+        {selectedTask.content.comparison_points && (
+          <div className="bg-blue-50 rounded-lg p-3">
+            <p className="font-semibold text-gray-700 text-sm mb-2">📋 What to cover:</p>
+            <ul className="space-y-1">
+              {selectedTask.content.comparison_points.map((point: string, i: number) => (
+                <li key={i} className="text-xs text-gray-600 flex items-start gap-2">
+                  <span className="text-blue-500 font-bold">{i + 1}.</span>{point}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Timings */}
+        <div className="flex gap-4 text-sm text-gray-500">
+          <span>⏱ Prep: {selectedTask.content.preparation_time_seconds}s</span>
+          <span>🎤 Speaking: {selectedTask.content.speaking_time_seconds}s</span>
+        </div>
+
+        {/* Tips */}
+        {selectedTask.content.tips && (
+          <div className="bg-yellow-50 rounded-lg p-3">
+            <p className="font-semibold text-gray-700 text-sm mb-2">💡 Tips:</p>
+            <ul className="space-y-1">
+              {selectedTask.content.tips.map((tip: string, i: number) => (
+                <li key={i} className="text-xs text-gray-600 flex items-start gap-2">
+                  <span className="text-yellow-500 font-bold">•</span>{tip}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Scoring Criteria */}
+        {selectedTask.content.scoring_criteria && (
+          <div className="border-t pt-3">
+            <p className="font-semibold text-gray-700 text-sm mb-2">📊 Scoring Criteria:</p>
+            <div className="space-y-1">
+              {Object.entries(selectedTask.content.scoring_criteria).map(([key, val]) => (
+                <div key={key} className="bg-gray-50 rounded p-2">
+                  <p className="text-xs font-bold text-gray-700 capitalize">
+                    {key.replace(/_/g, " ")}
                   </p>
-                  <ul className="space-y-1">
-                    {selectedTask.content.sample_answer_notes.map((note: string, i: number) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                        <span className="text-green-500 font-bold">✓</span>
-                        {note}
-                      </li>
-                    ))}
-                  </ul>
+                  <p className="text-xs text-gray-500">{val as string}</p>
                 </div>
-              )}
+              ))}
             </div>
-          )}
-  </div>
-)}
+          </div>
+        )}
+
+        {/* Sample Answer — new structure: sample_answer is an object */}
+        {selectedTask.content.sample_answer && typeof selectedTask.content.sample_answer === "object" && (
+          <div className="border-t pt-3">
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="font-bold text-green-700">Sample Answer</h3>
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">
+                Band {selectedTask.content.sample_answer.band}
+              </span>
+            </div>
+            <div className="bg-green-50 rounded-lg p-4 mb-3">
+              <p className="text-gray-700 text-sm italic">
+                "{selectedTask.content.sample_answer.response}"
+              </p>
+            </div>
+            {selectedTask.content.sample_answer.analysis && (
+              <div className="space-y-1">
+                <p className="font-semibold text-gray-700 text-sm mb-1">Response Analysis:</p>
+                {Object.entries(selectedTask.content.sample_answer.analysis).map(([key, val]) => (
+                  <div key={key} className="flex gap-2 text-xs text-gray-600">
+                    <span className="text-green-500 font-bold capitalize whitespace-nowrap">
+                      ✓ {key.replace(/_/g, " ")}:
+                    </span>
+                    <span>{val as string}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )}
+    {/* Task 6 - Two Options */}
+    {selectedTask.task_type === "Speaking Task 6" ? (
+      <div className="space-y-3">
+        {/* Options */}
+        <p className="font-semibold text-gray-700">Choose ONE person to address:</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+            <p className="text-xs font-bold text-purple-700 mb-1">Option A</p>
+            <p className="text-sm font-semibold text-gray-800">
+              {selectedTask.content.option_a?.person}
+            </p>
+            <p className="text-xs text-gray-600 mt-1">
+              {selectedTask.content.option_a?.instruction}
+            </p>
+          </div>
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+            <p className="text-xs font-bold text-purple-700 mb-1">Option B</p>
+            <p className="text-sm font-semibold text-gray-800">
+              {selectedTask.content.option_b?.person}
+            </p>
+            <p className="text-xs text-gray-600 mt-1">
+              {selectedTask.content.option_b?.instruction}
+            </p>
+          </div>
+        </div>
+
+        {/* Timings */}
+        <div className="flex gap-4 text-sm text-gray-500">
+          <span>⏱ Prep: {selectedTask.content.preparation_time_seconds}s</span>
+          <span>🎤 Speaking: {selectedTask.content.speaking_time_seconds}s</span>
+        </div>
+
+        {/* Tips */}
+        {selectedTask.content.tips && (
+          <div className="bg-yellow-50 rounded-lg p-3">
+            <p className="font-semibold text-gray-700 text-sm mb-2">💡 Tips:</p>
+            <ul className="space-y-1">
+              {selectedTask.content.tips.map((tip: string, i: number) => (
+                <li key={i} className="text-xs text-gray-600 flex items-start gap-2">
+                  <span className="text-yellow-500 font-bold">•</span>{tip}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Scoring Criteria */}
+        {selectedTask.content.scoring_criteria && (
+          <div className="border-t pt-3">
+            <p className="font-semibold text-gray-700 text-sm mb-2">📊 Scoring Criteria:</p>
+            <div className="space-y-1">
+              {Object.entries(selectedTask.content.scoring_criteria).map(([key, val]) => (
+                <div key={key} className="bg-gray-50 rounded p-2">
+                  <p className="text-xs font-bold text-gray-700 capitalize">
+                    {key.replace(/_/g, " ")}
+                  </p>
+                  <p className="text-xs text-gray-500">{val as string}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Sample Answer */}
+        {selectedTask.content.sample_answer && (
+          <div className="border-t pt-3">
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="font-bold text-green-700">Sample Answer</h3>
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">
+                Band {selectedTask.content.sample_answer.band}
+              </span>
+              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                Option {selectedTask.content.sample_answer.chosen_option}
+              </span>
+            </div>
+            <div className="bg-green-50 rounded-lg p-4 mb-3">
+              <p className="text-gray-700 text-sm italic">
+                "{selectedTask.content.sample_answer.response}"
+              </p>
+            </div>
+            {selectedTask.content.sample_answer.analysis && (
+              <div className="space-y-1">
+                <p className="font-semibold text-gray-700 text-sm mb-1">Response Analysis:</p>
+                {Object.entries(selectedTask.content.sample_answer.analysis).map(([key, val]) => (
+                  <div key={key} className="flex gap-2 text-xs text-gray-600">
+                    <span className="text-green-500 font-bold capitalize whitespace-nowrap">
+                      ✓ {key}:
+                    </span>
+                    <span>{val as string}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+    ) : selectedTask.task_type !== "Speaking Task 5" ? (
+      /* All other speaking tasks except Task 5 */
+      <div className="space-y-3">
+        <div>
+          <p className="font-semibold text-gray-700 mb-1">Task:</p>
+          <p className="text-gray-800">{selectedTask.content.prompt}</p>
+        </div>
+        <div className="flex gap-4 text-sm text-gray-500">
+          <span>⏱ Prep: {selectedTask.content.preparation_time_seconds}s</span>
+          <span>🎤 Speaking: {selectedTask.content.speaking_time_seconds}s</span>
+        </div>
+        {selectedTask.content.sample_answer && (
+          <div className="border-t pt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="font-bold text-green-700">Sample Answer</h3>
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">
+                Band {selectedTask.content.sample_answer_band}
+              </span>
+            </div>
+            <div className="bg-green-50 rounded-lg p-4 mb-3">
+              <p className="text-gray-700 text-sm italic">
+                "{selectedTask.content.sample_answer}"
+              </p>
+            </div>
+            {selectedTask.content.sample_answer_notes && (
+              <div>
+                <p className="font-semibold text-gray-700 text-sm mb-1">
+                  Why this is a high band answer:
+                </p>
+                <ul className="space-y-1">
+                  {selectedTask.content.sample_answer_notes.map((note: string, i: number) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
+                      <span className="text-green-500 font-bold">✓</span>
+                      {note}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        </div>
+      ) : null}
+
+    </div>
+  )}
 
       {/* Listening Task Preview */}
       {selectedTask.task_type.includes("Listening") && (
