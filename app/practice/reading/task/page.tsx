@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { VocabularySelectableText } from "../../../components/VocabularySelectableText";
 
 type Question = {
   id: number;
@@ -254,14 +255,18 @@ function ReadingContent() {
                   <p className="text-xs text-gray-500 mb-1">From: <span className="text-gray-700">{currentTask.content.main_message.from}</span></p>
                   <p className="text-xs text-gray-500 mb-1">To: <span className="text-gray-700">{currentTask.content.main_message.to}</span></p>
                   <p className="text-xs text-gray-500 mb-3">Subject: <span className="text-gray-700 font-semibold">{currentTask.content.main_message.subject}</span></p>
-                  <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">{currentTask.content.main_message.body}</p>
+                  <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">
+                    <VocabularySelectableText text={currentTask.content.main_message.body} source="reading" taskId={currentTask.id} />
+                  </p>
                 </div>
                 {currentTask.content.response_message && !currentTask.content.fill_in_blank && (
                   <div className="border border-gray-200 rounded-lg p-5 bg-gray-50">
                     <p className="text-xs text-gray-500 mb-1">From: <span className="text-gray-700">{currentTask.content.response_message.from}</span></p>
                     <p className="text-xs text-gray-500 mb-1">To: <span className="text-gray-700">{currentTask.content.response_message.to}</span></p>
                     <p className="text-xs text-gray-500 mb-3">Subject: <span className="text-gray-700 font-semibold">{currentTask.content.response_message.subject}</span></p>
-                    <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">{currentTask.content.response_message.body}</p>
+                    <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">
+                      <VocabularySelectableText text={currentTask.content.response_message.body} source="reading" taskId={currentTask.id} />
+                    </p>
                   </div>
                 )}
               </div>
@@ -276,7 +281,9 @@ function ReadingContent() {
             {currentTask.content.passage && (
               <div className="text-gray-800 text-sm leading-relaxed">
                 <h3 className="font-bold text-gray-900 text-base mb-3">{currentTask.content.title}</h3>
-                <p className="whitespace-pre-wrap">{currentTask.content.passage}</p>
+                <p className="whitespace-pre-wrap">
+                  <VocabularySelectableText text={currentTask.content.passage} source="reading" taskId={currentTask.id} />
+                </p>
               </div>
             )}
 
@@ -286,7 +293,9 @@ function ReadingContent() {
                 {currentTask.content.viewpoints.map((v, i) => (
                   <div key={i} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                     <p className="text-sm font-bold text-gray-800 mb-1">{v.name} — <span className="font-normal text-gray-500">{v.role}</span></p>
-                    <p className="text-sm text-gray-700 leading-relaxed">{v.opinion}</p>
+                    <p className="text-sm text-gray-700 leading-relaxed">
+                      <VocabularySelectableText text={v.opinion} source="reading" taskId={currentTask.id} />
+                    </p>
                   </div>
                 ))}
               </div>

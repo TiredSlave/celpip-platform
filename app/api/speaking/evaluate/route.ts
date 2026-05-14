@@ -1,99 +1,100 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 
 const anthropic = new Anthropic();
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { transcript, taskPrompt, taskNumber, userId, token } = body;
+    const formData = await request.formData();
+    const audioBlob = formData.get("audio") as Blob;
+    const taskPrompt = formData.get("taskPrompt") as string;
+    const taskNumber = formData.get("taskNumber") as string;
 
-    console.log("Transcript received:", transcript);
-
-    if (!transcript || transcript.trim() === "") {
-      return NextResponse.json(
-        { error: "No transcript provided. Please try speaking again." },
-        { status: 400 }
-      );
+    if (!audioBlob) {
+      return NextResponse.json({ error: "No audio provided" }, { status: 400 });
     }
 
-    console.log("Evaluating with Claude...");
+    // Transcribe with Google STT
+    console.log("Transcribing...");
+    const audioBuffer = await audioBlob.arrayBuffer();
+    const base64Audio = Buffer.from(audioBuffer).toString("base64");
 
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2048,
-      system: `You are a certified CELPIP Speaking examiner.
-               Evaluate spoken responses using the official CELPIP
-               Speaking rubric with bands from 1 to 12.
-               Return raw JSON only. No markdown. No backticks.`,
-      messages: [
-        {
-          role: "user",
-          content: `Evaluate this CELPIP Speaking Task ${taskNumber} response.
+    const sttRes = await fetch(
+      `https://speech.googleapis.com/v1/speech:recognize?key=${process.env.GOOGLE_TTS_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          config: {
+            encoding: "WEBM_OPUS",
+            sampleRateHertz: 48000,
+            languageCode: "en-CA",
+            enableAutomaticPunctuation: true,
+            model: "latest_long",
+            useEnhanced: true,
+          },
+          audio: { content: base64Audio.trim() }
+        })
+      }
+    );
 
-Task: ${taskPrompt}
+    if (!sttRes.ok) {
+      const err = await sttRes.text();
+      console.error("STT error:", err);
+      return NextResponse.json({ error: "Transcription failed: " + err }, { status: 500 });
+    }
 
-Transcript of spoken response:
-"${transcript}"
+    const sttData = await sttRes.json();
+    const transcript = sttData.results
+      ?.map((r: any) => r.alternatives[0]?.transcript)
+      .filter(Boolean).join(" ").trim() || "";
 
-Return JSON with exactly these keys:
-{
-  "overall_band": <1-12>,
-  "subscores": {
-    "coherence": <1-12>,
-    "vocabulary": <1-12>,
-    "grammar": <1-12>,
-    "pronunciation_fluency": <1-12>
-  },
-  "strengths": ["strength 1", "strength 2"],
-  "areas_to_improve": ["area 1", "area 2"],
-  "detailed_feedback": "2-3 sentences of overall feedback",
-  "sample_improved_response": "a better version of one part of their response"
-}`
+    console.log("Transcript:", transcript);
+
+    if (!transcript) {
+      return NextResponse.json({ 
+        transcript: "",
+        evaluation: {
+          overall_band: 1,
+          subscores: { coherence: 1, vocabulary: 1, grammar: 1, pronunciation_fluency: 1 },
+          strengths: [],
+          areas_to_improve: ["No speech was detected in your recording"],
+          detailed_feedback: "No speech was detected. Please ensure your microphone is working and try again.",
+          sample_improved_response: ""
         }
-      ]
-    });
-
-    const block = response.content[0];
-    const text = block.type === "text" ? block.text : "";
-    const cleaned = text
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
-
-    const evaluation = JSON.parse(cleaned);
-
-    // Save to database if logged in
-    if (userId && token) {
-      const supabaseUser = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          global: {
-            headers: { Authorization: `Bearer ${token}` }
-          }
-        }
-      );
-
-      await supabaseUser.from("attempts").insert({
-        user_id: userId,
-        task_type: `Speaking Task ${taskNumber}`,
-        task_prompt: taskPrompt,
-        user_response: transcript,
-        overall_band: evaluation.overall_band,
-        subscores: evaluation.subscores,
-        strengths: evaluation.strengths,
-        areas_to_improve: evaluation.areas_to_improve,
-        detailed_feedback: evaluation.detailed_feedback,
-        sample_improved_sentence: evaluation.sample_improved_response
       });
     }
+
+    // Evaluate with Claude
+    console.log("Evaluating...");
+    const evalRes = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2048,
+      system: "You are a certified CELPIP Speaking examiner. Evaluate using bands 1-12. Return raw JSON only. No markdown. No backticks.",
+      messages: [{
+        role: "user",
+        content: `Evaluate this CELPIP Speaking Task ${taskNumber} response.
+Task: ${taskPrompt}
+Transcript: "${transcript}"
+Return JSON:
+{
+  "overall_band": 7,
+  "subscores": { "coherence": 7, "vocabulary": 7, "grammar": 7, "pronunciation_fluency": 7 },
+  "strengths": ["strength 1", "strength 2"],
+  "areas_to_improve": ["area 1", "area 2"],
+  "detailed_feedback": "2-3 sentences of feedback",
+  "sample_improved_response": "improved version of their response"
+}`
+      }]
+    });
+
+    const evalText = evalRes.content[0].type === "text" ? evalRes.content[0].text : "";
+    const evaluation = JSON.parse(evalText.replace(/```json/g,"").replace(/```/g,"").trim());
 
     return NextResponse.json({ transcript, evaluation });
 
   } catch (error) {
-    console.error("Error:", error);
+    console.error("Evaluate error:", error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }

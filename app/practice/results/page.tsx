@@ -21,7 +21,59 @@ type Result = {
   answers: Record<number, string>;
   questions: Question[];
   feedback?: any;
+  studentResponse?: string;
+  transcript?: string;
+  isSpeaking?: boolean;
+  writingTask2Choice?: "A" | "B" | null;
+  writingTask2ChosenLabel?: string;
 };
+
+/** Rubric copy for writing — mirrors “question + explanation” blocks on reading/listening results */
+const WRITING_CRITERIA_META: Record<string, { label: string; rule: string }> = {
+  content_coherence: {
+    label: "Content / Coherence",
+    rule: "Examiners look for clear ideas, logical order, and smooth links between sentences and paragraphs. Higher levels show fully developed points with few gaps.",
+  },
+  vocabulary: {
+    label: "Vocabulary range & precision",
+    rule: "Range, accuracy, and fit for the situation matter. Strong responses use varied, natural word choices with few errors that do not obscure meaning.",
+  },
+  readability: {
+    label: "Readability & tone",
+    rule: "Grammar, punctuation, sentence variety, and an appropriate register (formal/informal) for the task. Minor slips are acceptable if meaning stays clear.",
+  },
+  task_fulfillment: {
+    label: "Task fulfillment",
+    rule: "Task 1: all bullet points and instructions are covered. Task 2: the essay should defend the option the candidate selected (A or B); arguing mainly for the other side or staying vague lowers the score.",
+  },
+};
+
+/** Rubric copy for speaking subscores — matches API keys from `/api/speaking/evaluate` */
+const SPEAKING_SUBSCORE_META: Record<string, { label: string; rule: string }> = {
+  coherence: {
+    label: "Coherence & cohesion",
+    rule: "How clearly ideas are organized and linked. Higher bands show logical flow, enough detail for the task, and fewer long pauses or false starts that break communication.",
+  },
+  vocabulary: {
+    label: "Vocabulary range & accuracy",
+    rule: "Fit and precision of word choice for the situation. Strong answers use varied, natural language; staying very basic or repeating the same words lowers the band.",
+  },
+  grammar: {
+    label: "Grammar & sentence control",
+    rule: "Range and accuracy of structures. Minor slips are acceptable when meaning stays clear; frequent errors that interfere with understanding lower the band.",
+  },
+  pronunciation_fluency: {
+    label: "Pronunciation & fluency",
+    rule: "Intelligibility, rhythm, and smooth delivery. Natural self-correction is fine; long silences or speech that is hard to follow reduces the score.",
+  },
+};
+
+function bandAccentClass(b: number) {
+  if (b >= 9) return "text-green-600";
+  if (b >= 7) return "text-blue-600";
+  if (b >= 5) return "text-yellow-600";
+  return "text-red-600";
+}
 
 function ResultsContent() {
   const router = useRouter();
@@ -49,7 +101,14 @@ function ResultsContent() {
         score: r.score,
         total: r.total,
         answers: r.answers,
-        feedback: { questions: r.questions },
+        feedback: {
+          questions: r.questions,
+          ...(r.feedback ? { ai: r.feedback } : {}),
+          ...(r.studentResponse ? { studentResponse: r.studentResponse } : {}),
+          ...(r.transcript ? { transcript: r.transcript } : {}),
+          ...(r.writingTask2Choice ? { writingTask2Choice: r.writingTask2Choice } : {}),
+          ...(r.writingTask2ChosenLabel ? { writingTask2ChosenLabel: r.writingTask2ChosenLabel } : {}),
+        },
       });
       setSaved(true);
     } catch (e) {
@@ -80,7 +139,20 @@ function ResultsContent() {
     listening: { btn: "bg-orange-600 hover:bg-orange-700",text: "text-orange-600", back: "/practice/listening" },
   }[section];
 
+  const retakeHref = result.taskId
+    ? `/practice/${section}/task?taskId=${encodeURIComponent(result.taskId)}`
+    : sectionStyle.back;
+
   const isWriting = result.taskType.includes("Writing");
+  const isSpeaking = result.taskType.includes("Speaking");
+  const speakFb = isSpeaking && result.feedback ? result.feedback as {
+    overall_band?: number;
+    subscores?: Record<string, number>;
+    strengths?: string[];
+    areas_to_improve?: string[];
+    detailed_feedback?: string;
+    sample_improved_response?: string;
+  } : null;
 
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-6">
@@ -103,41 +175,206 @@ function ResultsContent() {
         <div className={"border rounded-2xl p-8 mb-8 text-center " + scoreBg}>
           <div className={"text-6xl font-bold mb-2 " + scoreColor}>{result.score}/{result.total}</div>
           <div className={"text-2xl font-semibold mb-1 " + scoreColor}>{pct}%</div>
+          {(isWriting || isSpeaking) && (
+            <p className="text-gray-500 text-xs mb-2">Practice band score (12 = strongest for this drill)</p>
+          )}
           <p className="text-gray-600 text-sm">
             {pct >= 80 ? "Excellent work! 🎉" : pct >= 60 ? "Good effort! Keep practicing 💪" : "Keep going — practice makes perfect! 📚"}
           </p>
         </div>
 
-        {/* Writing Feedback */}
+        {/* Writing — same information architecture as Question Review (per-item cards + tip boxes) */}
         {isWriting && result.feedback && (
-          <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-lg font-bold text-gray-800">AI Feedback</h2>
-              {result.feedback.band && (
-                <span className="bg-blue-100 text-blue-700 text-sm font-bold px-3 py-1 rounded-full">Band {result.feedback.band}</span>
-              )}
-            </div>
-            {result.feedback.overall && <p className="text-gray-700 text-sm leading-relaxed mb-4">{result.feedback.overall}</p>}
-            {result.feedback.criteria && (
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                {Object.entries(result.feedback.criteria).map(([key, val]: any) => (
-                  <div key={key} className="bg-gray-50 rounded-xl p-4">
-                    <p className="text-xs font-bold text-gray-600 capitalize mb-1">{key.replace(/_/g, " ")}</p>
-                    <p className="text-xs text-gray-600">{val}</p>
-                  </div>
-                ))}
+          <div className="space-y-6 mb-8">
+            <h2 className="text-lg font-bold text-gray-800">Response review</h2>
+
+            {result.studentResponse && (
+              <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                <p className="text-sm font-semibold text-gray-800 mb-3">Your response</p>
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{result.studentResponse}</p>
               </div>
             )}
-            {result.feedback.improvements && (
-              <div>
-                <p className="text-sm font-bold text-gray-700 mb-2">Areas to improve:</p>
-                <ul className="space-y-1">
+
+            {result.writingTask2Choice && (
+              <div className="bg-white border border-blue-200 rounded-2xl p-6">
+                <p className="text-sm font-semibold text-gray-800 mb-2">Declared choice (Task 2)</p>
+                <p className="text-sm text-gray-700">
+                  You selected <span className="font-bold text-blue-700">Option {result.writingTask2Choice}</span>
+                  {result.writingTask2ChosenLabel ? (
+                    <span className="block mt-2 text-gray-600 leading-relaxed">&ldquo;{result.writingTask2ChosenLabel}&rdquo;</span>
+                  ) : null}
+                </p>
+                <p className="text-xs text-gray-500 mt-2">Feedback below was scored against this option.</p>
+              </div>
+            )}
+
+            <div className="bg-white border border-gray-200 rounded-2xl p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <h3 className="text-sm font-bold text-gray-800">Overall feedback</h3>
+                {result.feedback.band != null && result.feedback.band !== "" && (
+                  <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full">Band {result.feedback.band}</span>
+                )}
+              </div>
+              {result.feedback.overall && (
+                <p className="text-sm text-gray-700 leading-relaxed">{result.feedback.overall}</p>
+              )}
+            </div>
+
+            {result.feedback.criteria && (() => {
+              const criteria = result.feedback.criteria as Record<string, string>;
+              const primaryOrder = Object.keys(WRITING_CRITERIA_META);
+              const keys = [
+                ...primaryOrder.filter(k => criteria[k] != null && String(criteria[k]).trim() !== ""),
+                ...Object.keys(criteria).filter(k => !primaryOrder.includes(k)),
+              ];
+              if (keys.length === 0) return null;
+              return (
+              <>
+                <h2 className="text-lg font-bold text-gray-800">Ratings by criterion</h2>
+                {keys.map((key, idx) => {
+                  const val = criteria[key];
+                  const meta = WRITING_CRITERIA_META[key] || {
+                    label: key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+                    rule: "This dimension reflects how well your writing meets CELPIP-style expectations for the task.",
+                  };
+                  return (
+                    <div key={key} className="bg-white border border-gray-200 rounded-2xl p-6">
+                      <div className="flex items-start gap-3 mb-4">
+                        <span className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white bg-blue-500">
+                          {idx + 1}
+                        </span>
+                        <p className="text-sm font-semibold text-gray-800">{meta.label}</p>
+                      </div>
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 mb-4">
+                        <p className="text-xs font-bold text-yellow-800 mb-1">💡 How this is scored</p>
+                        <p className="text-xs text-yellow-800 leading-relaxed">{meta.rule}</p>
+                      </div>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Your feedback</p>
+                      <p className="text-sm text-gray-700 leading-relaxed">{String(val)}</p>
+                    </div>
+                  );
+                })}
+              </>
+              );
+            })()}
+
+            {result.feedback.improvements && result.feedback.improvements.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                <p className="text-sm font-bold text-gray-800 mb-3">Areas to improve</p>
+                <ul className="space-y-2">
                   {result.feedback.improvements.map((imp: string, i: number) => (
                     <li key={i} className="text-sm text-gray-600 flex gap-2">
                       <span className="text-orange-500 flex-shrink-0">→</span>{imp}
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Speaking — same card pattern as writing (transcript, overall, rubric + score per dimension, lists, sample) */}
+        {speakFb && (
+          <div className="space-y-6 mb-8">
+            <h2 className="text-lg font-bold text-gray-800">Response review</h2>
+
+            {result.transcript != null && String(result.transcript).trim() !== "" && (
+              <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                <p className="text-sm font-semibold text-gray-800 mb-3">What you said (transcript)</p>
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap italic">&ldquo;{result.transcript}&rdquo;</p>
+              </div>
+            )}
+
+            <div className="bg-white border border-gray-200 rounded-2xl p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <h3 className="text-sm font-bold text-gray-800">Overall feedback</h3>
+                {speakFb.overall_band != null && (
+                  <span className="bg-purple-100 text-purple-800 text-xs font-bold px-3 py-1 rounded-full">Band {speakFb.overall_band}</span>
+                )}
+              </div>
+              {speakFb.detailed_feedback && (
+                <p className="text-sm text-gray-700 leading-relaxed">{speakFb.detailed_feedback}</p>
+              )}
+            </div>
+
+            {speakFb.subscores && (() => {
+              const sub = speakFb.subscores as Record<string, number>;
+              const primaryOrder = Object.keys(SPEAKING_SUBSCORE_META);
+              const keys = [
+                ...primaryOrder.filter(k => sub[k] != null && !Number.isNaN(Number(sub[k]))),
+                ...Object.keys(sub).filter(k => !primaryOrder.includes(k)),
+              ];
+              if (keys.length === 0) return null;
+              return (
+                <>
+                  <h2 className="text-lg font-bold text-gray-800">Ratings by criterion</h2>
+                  {keys.map((key, idx) => {
+                    const band = Number(sub[key]);
+                    const meta = SPEAKING_SUBSCORE_META[key] || {
+                      label: key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+                      rule: "This score reflects how well your spoken response meets CELPIP-style expectations in this area.",
+                    };
+                    return (
+                      <div key={key} className="bg-white border border-gray-200 rounded-2xl p-6">
+                        <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+                          <div className="flex items-start gap-3">
+                            <span className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white bg-purple-500">
+                              {idx + 1}
+                            </span>
+                            <p className="text-sm font-semibold text-gray-800">{meta.label}</p>
+                          </div>
+                          <span className={"text-lg font-bold tabular-nums " + bandAccentClass(band)}>
+                            {band}<span className="text-gray-400 text-sm font-semibold"> /12</span>
+                          </span>
+                        </div>
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 mb-4">
+                          <p className="text-xs font-bold text-yellow-800 mb-1">💡 How this is scored</p>
+                          <p className="text-xs text-yellow-800 leading-relaxed">{meta.rule}</p>
+                        </div>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Your score</p>
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                          Practice band <strong className={bandAccentClass(band)}>{band}</strong> out of 12 for this dimension.
+                        </p>
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()}
+
+            {speakFb.strengths && speakFb.strengths.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                <p className="text-sm font-bold text-gray-800 mb-3">Strengths</p>
+                <ul className="space-y-2">
+                  {speakFb.strengths.map((s: string, i: number) => (
+                    <li key={i} className="text-sm text-gray-700 flex gap-2 bg-green-50 border border-green-100 rounded-xl px-4 py-3">
+                      <span className="text-green-600 flex-shrink-0 font-bold">✓</span>
+                      <span>{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {speakFb.areas_to_improve && speakFb.areas_to_improve.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                <p className="text-sm font-bold text-gray-800 mb-3">Areas to improve</p>
+                <ul className="space-y-2">
+                  {speakFb.areas_to_improve.map((imp: string, i: number) => (
+                    <li key={i} className="text-sm text-gray-600 flex gap-2">
+                      <span className="text-orange-500 flex-shrink-0">→</span>{imp}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {speakFb.sample_improved_response != null && String(speakFb.sample_improved_response).trim() !== "" && (
+              <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                <p className="text-sm font-bold text-gray-800 mb-3">Sample improved response</p>
+                <p className="text-sm text-purple-900 leading-relaxed bg-purple-50 border border-purple-100 rounded-xl p-4 whitespace-pre-wrap">
+                  {speakFb.sample_improved_response}
+                </p>
               </div>
             )}
           </div>
@@ -198,10 +435,10 @@ function ResultsContent() {
 
         {/* Action Buttons */}
         <div className="flex gap-3 mt-8">
-          <Link href={sectionStyle.back} className={"flex-1 text-center py-3 rounded-xl text-white font-semibold text-sm transition " + sectionStyle.btn}>
-            Try Another Task
+          <Link href={retakeHref} className={"flex-1 text-center py-3 rounded-xl text-white font-semibold text-sm transition " + sectionStyle.btn}>
+            Re-take
           </Link>
-          <Link href="/practice" className="flex-1 text-center py-3 rounded-xl border border-gray-200 text-gray-700 font-semibold text-sm hover:bg-gray-50 transition">
+          <Link href={sectionStyle.back} className="flex-1 text-center py-3 rounded-xl border border-gray-200 text-gray-700 font-semibold text-sm hover:bg-gray-50 transition">
             Back to Practice
           </Link>
         </div>

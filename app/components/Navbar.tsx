@@ -7,16 +7,16 @@ import { supabase } from "../lib/supabase";
 const PRACTICE_MENU = [
   {
     section: "✍️ Writing",
+    sectionHome: "/practice/writing",
     items: [
-      { label: "All Writing Tasks", href: "/practice/writing" },
       { label: "Task 1 — Write an Email", href: "/practice/writing?filter=Writing Task 1" },
       { label: "Task 2 — Respond to Survey", href: "/practice/writing?filter=Writing Task 2" },
     ],
   },
   {
     section: "📖 Reading",
+    sectionHome: "/practice/reading",
     items: [
-      { label: "All Reading Tasks", href: "/practice/reading" },
       { label: "Part 1 — Correspondence", href: "/practice/reading?filter=Reading Correspondence" },
       { label: "Part 2 — Apply Information", href: "/practice/reading?filter=Reading to Apply Information" },
       { label: "Part 3 — Information", href: "/practice/reading?filter=Reading for Information" },
@@ -25,8 +25,8 @@ const PRACTICE_MENU = [
   },
   {
     section: "🎤 Speaking",
+    sectionHome: "/practice/speaking",
     items: [
-      { label: "All Speaking Tasks", href: "/practice/speaking" },
       { label: "Task 1 — Give Advice", href: "/practice/speaking?filter=Speaking Task 1" },
       { label: "Task 2 — Personal Experience", href: "/practice/speaking?filter=Speaking Task 2" },
       { label: "Task 3 — Describe a Picture", href: "/practice/speaking?filter=Speaking Task 3" },
@@ -39,8 +39,8 @@ const PRACTICE_MENU = [
   },
   {
     section: "🎧 Listening",
+    sectionHome: "/practice/listening",
     items: [
-      { label: "All Listening Tasks", href: "/practice/listening" },
       { label: "Part 1 — Problem Solving", href: "/practice/listening?filter=Listening - Problem Solving" },
       { label: "Part 2 — Daily Life", href: "/practice/listening?filter=Listening - Daily Life Conversation" },
       { label: "Part 3 — Information", href: "/practice/listening?filter=Listening - Listening for Information" },
@@ -73,14 +73,21 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
+    function handlePointerDown(e: PointerEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setPracticeOpen(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
   }, []);
+
+  /** When opening the menu, match the highlighted section to the current practice route */
+  useEffect(() => {
+    if (!practiceOpen || !pathname) return;
+    const match = PRACTICE_MENU.find(m => pathname.startsWith(m.sectionHome));
+    if (match) setActiveSection(match.section);
+  }, [practiceOpen, pathname]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -123,14 +130,19 @@ export default function Navbar() {
               <div className="absolute top-full left-0 mt-2 w-[640px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
                 <div className="flex">
 
-                  {/* Left — Section tabs */}
+                  {/* Left — Section tabs (opens that skill’s task list) */}
                   <div className="w-48 bg-gray-50 border-r border-gray-100 p-3 space-y-1">
                     {PRACTICE_MENU.map(s => {
                       const c = SECTION_COLORS[s.section];
                       return (
                         <button
                           key={s.section}
-                          onClick={() => setActiveSection(s.section)}
+                          type="button"
+                          onClick={() => {
+                            setActiveSection(s.section);
+                            setPracticeOpen(false);
+                            router.push(s.sectionHome);
+                          }}
                           className={`w-full text-left px-4 py-3 rounded-xl text-sm font-semibold transition ${
                             activeSection === s.section ? `${c.activeBg} ${c.text}` : "text-gray-600 hover:bg-gray-100"
                           }`}
@@ -149,7 +161,7 @@ export default function Navbar() {
                     <div className="space-y-1">
                       {PRACTICE_MENU.find(s => s.section === activeSection)?.items.map(item => (
                         <Link
-                          key={item.href}
+                          key={item.label + item.href}
                           href={item.href}
                           onClick={() => setPracticeOpen(false)}
                           className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-700 transition ${colors.hover}`}

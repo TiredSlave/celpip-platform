@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { VocabularySelectableText } from "../../../components/VocabularySelectableText";
 declare global { interface Window { __currentAudio?: HTMLAudioElement; } }
 type Question = {
   id: number;
@@ -518,7 +519,9 @@ function ListeningContent() {
                         {sectionDialogue.map((line, i) => (
                           <div key={i} className="flex gap-3">
                             <span className="text-xs font-bold text-blue-600 whitespace-nowrap min-w-20 mt-0.5">{line.speaker}:</span>
-                            <p className="text-sm text-gray-700 leading-relaxed">{line.text}</p>
+                            <p className="text-sm text-gray-700 leading-relaxed flex-1 min-w-0">
+                              <VocabularySelectableText text={line.text} source="listening" taskId={currentTask.id} />
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -639,7 +642,9 @@ function ListeningContent() {
                     {currentTask.content.dialogue.map((line, i) => (
                       <div key={i} className="flex gap-3">
                         <span className="text-xs font-bold text-blue-600 whitespace-nowrap min-w-20 mt-0.5">{line.speaker}:</span>
-                        <p className="text-sm text-gray-700 leading-relaxed">{line.text}</p>
+                        <p className="text-sm text-gray-700 leading-relaxed flex-1 min-w-0">
+                          <VocabularySelectableText text={line.text} source="listening" taskId={currentTask.id} />
+                        </p>
                       </div>
                     ))}
                   </div>

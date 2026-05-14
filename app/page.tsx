@@ -17,8 +17,11 @@ type Task1 = {
 type Task2 = {
   task_type: string;
   topic: string;
+  context?: string;
   question: string;
-  opinion_options: string[];
+  opinion_options?: string[];
+  option_a?: string;
+  option_b?: string;
   word_limit: number;
   time_limit_minutes: number;
   sample_answer?: string;
@@ -62,7 +65,7 @@ export default function Home() {
   setWordCount(0);
   stopTimer();
   try {
-    const res = await fetch("/api/tasks/generate", {
+    const res = await fetch("/api/admin/writing/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ taskType: activeTask })
@@ -288,11 +291,17 @@ function handleResponseChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
         )}
 
         {/* Task 2 Display */}
-        {task && activeTask === "Writing Task 2" && (
+        {task && activeTask === "Writing Task 2" && (() => {
+          const t2 = task as Task2;
+          const options =
+            t2.option_a != null && t2.option_b != null
+              ? [t2.option_a, t2.option_b]
+              : (t2.opinion_options || []);
+          return (
           <div className="bg-white rounded-xl shadow p-6 mb-6 border-l-4 border-purple-600">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-purple-700">
-                {(task as Task2).task_type}
+                {t2.task_type}
               </h2>
               <div className="flex gap-4 text-sm text-gray-500">
                 <span>⏱ {task.time_limit_minutes} min</span>
@@ -301,27 +310,33 @@ function handleResponseChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
             </div>
             <div className="bg-purple-50 rounded-lg p-4 mb-4">
               <p className="font-semibold text-gray-700 mb-1">Topic:</p>
-              <p className="text-gray-700">{(task as Task2).topic}</p>
+              <p className="text-gray-700">{t2.topic}</p>
             </div>
+            {t2.context && (
+              <div className="mb-4">
+                <p className="font-semibold text-gray-700 mb-1">Background:</p>
+                <p className="text-gray-700 text-sm leading-relaxed">{t2.context}</p>
+              </div>
+            )}
             <div className="mb-4">
               <p className="font-semibold text-gray-700 mb-2">Question:</p>
               <p className="text-gray-800 text-lg font-medium">
-                {(task as Task2).question}
+                {t2.question}
               </p>
             </div>
             <div>
               <p className="font-semibold text-gray-700 mb-2">
-                Choose one opinion to defend:
+                Choose one option to support:
               </p>
               <div className="grid grid-cols-2 gap-3">
-                {(task as Task2).opinion_options.map((option, i) => (
+                {options.map((option, i) => (
                   <div
                     key={i}
                     className="bg-purple-50 border border-purple-200
                                rounded-lg p-3 text-gray-700 text-sm"
                   >
                     <span className="font-bold text-purple-600 mr-2">
-                      Option {i + 1}:
+                      Option {String.fromCharCode(65 + i)}:
                     </span>
                     {option}
                   </div>
@@ -329,7 +344,8 @@ function handleResponseChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* Response Area */}
         {/* Response Area */}

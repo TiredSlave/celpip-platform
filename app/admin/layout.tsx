@@ -45,6 +45,7 @@ export default function AdminLayout({
     { href: "/admin", label: "Dashboard", icon: "📊" },
     { href: "/admin/users", label: "Users", icon: "👥" },
     { href: "/admin/tasks", label: "Tasks", icon: "📝" },
+    { href: "/admin/vocabulary-speaking", label: "Speaking vocab", icon: "💬" },
     { href: "/admin/mock-tests", label: "Mock Tests", icon: "📋" },
   ];
 

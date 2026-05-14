@@ -19,23 +19,15 @@ type SpeakingTask = {
     image_url?: string;
     image_url_1?: string;
     image_url_2?: string;
-    option_a?: { person: string; instruction: string };
-    option_b?: { person: string; instruction: string };
+    option_a?: any;
+    option_b?: any;
+    person_to_persuade?: string;
     scoring_criteria?: Record<string, string>;
     sample_answer?: any;
   };
 };
 
-type Phase = "idle" | "preparing" | "recording" | "processing" | "done";
-
-type Evaluation = {
-  overall_band: number;
-  subscores: Record<string, number>;
-  strengths: string[];
-  areas_to_improve: string[];
-  detailed_feedback: string;
-  sample_improved_response: string;
-};
+type Phase = "idle" | "preparing" | "recording" | "stopped" | "processing" | "done";
 
 function getBandColor(band: number) {
   if (band >= 9) return "text-green-600";
@@ -47,64 +39,30 @@ function getBandColor(band: number) {
 function SpeakingContent() {
   const searchParams = useSearchParams();
   const taskId = searchParams.get("taskId");
-
   const [task, setTask] = useState<SpeakingTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [phase, setPhase] = useState<Phase>("idle");
   const [prepTimeLeft, setPrepTimeLeft] = useState(0);
   const [recTimeLeft, setRecTimeLeft] = useState(0);
-  const [transcript, setTranscript] = useState("");
-  const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [error, setError] = useState("");
   const [selectedOption, setSelectedOption] = useState<"A" | "B" | null>(null);
-  const [selectionTimeLeft, setSelectionTimeLeft] = useState(0);
-  const [selectingPhase, setSelectingPhase] = useState(false);
-
+  const [showEvalBtn, setShowEvalBtn] = useState(false);
+  const [evaluation, setEvaluation] = useState<any>(null);
+  const [transcript, setTranscript] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const selectedOptionRef = useRef<"A" | "B" | null>(null);
 
   useEffect(() => { loadTask(); }, [taskId]);
 
-  // Auto-start for tasks
   useEffect(() => {
-    if (!task) return;
-    const num = task.content.task_number;
-    if (num === 5) {
-      // Task 5: start 60s selection timer
-      startSelectionTimer();
-    } else if (num !== 6) {
-      // All other tasks except 6: auto-start prep
+    if (!task || phase !== "idle") return;
+    const timer = setTimeout(() => {
       startPreparation();
-    }
+    }, 500);
+    return () => clearTimeout(timer);
   }, [task]);
-
-  function startSelectionTimer() {
-    if (!task) return;
-    setSelectingPhase(true);
-    setSelectionTimeLeft(task.content.selection_time_seconds || 60);
-    timerRef.current = setInterval(() => {
-      setSelectionTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          // Auto-assign Option A if nothing selected
-          setSelectedOption(s => s || "A");
-          setSelectingPhase(false);
-          startRecording();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }
-
-  function handleSelectOption(opt: "A" | "B") {
-    setSelectedOption(opt);
-    setSelectingPhase(false);
-    if (timerRef.current) clearInterval(timerRef.current);
-    // Start recording immediately after selection
-    startRecording();
-  }
 
   async function loadTask() {
     setLoading(true);
@@ -118,31 +76,55 @@ function SpeakingContent() {
   function startPreparation() {
     if (!task) return;
     setPhase("preparing");
-    setPrepTimeLeft(task.content.preparation_time_seconds);
+    const prepTime = task.content.preparation_time_seconds || 30;
+    setPrepTimeLeft(prepTime);
+    if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setPrepTimeLeft(prev => {
-        if (prev <= 1) { clearInterval(timerRef.current!); startRecording(); return 0; }
+          if (prev <= 1) {
+          clearInterval(timerRef.current!);
+          if ((task.content.task_number === 5 || task.content.task_number === 6) && !selectedOptionRef.current) {
+            selectedOptionRef.current = "A";
+            setSelectedOption("A");
+          }
+          startRecording();
+          return 0;
+        }
         return prev - 1;
       });
     }, 1000);
   }
 
+  function handleSelectOption(opt: "A" | "B") {
+    selectedOptionRef.current = opt;
+    setSelectedOption(opt);
+  }
+
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
       mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      mediaRecorder.start();
+      mediaRecorder.start(100);
       setPhase("recording");
       if (!task) return;
-      setRecTimeLeft(task.content.speaking_time_seconds);
+      const speakTime = task.content.speaking_time_seconds || 60;
+      let timeLeft = speakTime;
+      setRecTimeLeft(speakTime);
+      if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
-        setRecTimeLeft(prev => {
-          if (prev <= 1) { clearInterval(timerRef.current!); stopRecording(); return 0; }
-          return prev - 1;
-        });
+        timeLeft -= 1;
+        setRecTimeLeft(timeLeft);
+        if (timeLeft <= 0) {
+          clearInterval(timerRef.current!);
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+            mediaRecorderRef.current.stop();
+            mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+          }
+          setShowEvalBtn(true);
+        }
       }, 1000);
     } catch {
       setError("Could not access microphone. Please allow microphone access.");
@@ -151,13 +133,17 @@ function SpeakingContent() {
   }
 
   function stopRecording() {
-    if (mediaRecorderRef.current && phase === "recording") {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-      mediaRecorderRef.current.onstop = () => submitAudio();
-      setPhase("processing");
-      if (timerRef.current) clearInterval(timerRef.current);
     }
+    setShowEvalBtn(true);
+  }
+
+  function goToEvaluation() {
+    setPhase("processing");
+    submitAudio();
   }
 
   async function submitAudio() {
@@ -167,260 +153,240 @@ function SpeakingContent() {
       const { data: { session } } = await supabase.auth.getSession();
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
-      formData.append("taskPrompt", task.content.prompt || task.content.situation);
+      let taskPrompt = task.content.prompt || task.content.situation || "";
+      const opt = selectedOptionRef.current;
+      if (opt && task.content.task_number === 6) {
+        const chosen = opt === "A" ? task.content.option_a : task.content.option_b;
+        taskPrompt += "\n\nChose to address: " + chosen?.person + ". Instruction: " + chosen?.instruction;
+      } else if (opt && task.content.task_number === 5) {
+        const chosen = opt === "A" ? task.content.option_a : task.content.option_b;
+        taskPrompt += "\n\nChose: " + chosen?.label + ". Must persuade " + task.content.person_to_persuade;
+      }
+      formData.append("taskPrompt", taskPrompt);
       formData.append("taskNumber", String(task.content.task_number));
       formData.append("userId", session?.user?.id || "");
       formData.append("token", session?.access_token || "");
       const res = await fetch("/api/speaking/evaluate", { method: "POST", body: formData });
       const data = await res.json();
-      if (data.error) { setError(data.error); setPhase("idle"); }
-      else { setTranscript(data.transcript); setEvaluation(data.evaluation); setPhase("done"); }
+      if (data.error) { setError(data.error); setPhase("stopped"); }
+      else {
+        const result = {
+          taskId: task.id, taskType: task.task_type,
+          score: data.evaluation?.overall_band || 0, total: 12,
+          answers: {}, questions: [],
+          feedback: data.evaluation, transcript: data.transcript, isSpeaking: true,
+        };
+        sessionStorage.setItem("celpip_result", JSON.stringify(result));
+        window.location.href = "/practice/results";
+      }
     } catch {
       setError("Failed to evaluate. Please try again.");
-      setPhase("idle");
+      setPhase("stopped");
     }
   }
 
   function resetTask() {
-    setPhase("idle");
-    setEvaluation(null);
-    setTranscript("");
-    setError("");
-    setSelectedOption(null);
     if (timerRef.current) clearInterval(timerRef.current);
+    setPhase("idle"); setError(""); setSelectedOption(null); setEvaluation(null); setTranscript(""); setShowEvalBtn(false);
+    selectedOptionRef.current = null; setPrepTimeLeft(0); setRecTimeLeft(0); chunksRef.current = [];
   }
 
   const taskNum = task?.content.task_number;
 
-  if (loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
-
-  if (!task) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center">
-        <div className="text-5xl mb-4">📭</div>
-        <h2 className="text-xl font-bold text-gray-800 mb-2">Task not found</h2>
-        <Link href="/practice/speaking" className="text-purple-600 hover:underline">← Back to Speaking Practice</Link>
-      </div>
-    </div>
-  );
+  if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" /></div>;
+  if (!task) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-center"><div className="text-5xl mb-4">📭</div><h2 className="text-xl font-bold text-gray-800 mb-2">Task not found</h2><Link href="/practice/speaking" className="text-purple-600 hover:underline">← Back</Link></div></div>;
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
         <div>
           <Link href="/practice/speaking" className="text-sm text-purple-600 hover:underline">← Speaking Practice</Link>
           <h1 className="text-lg font-bold text-gray-900">Speaking {task.content.task_type}</h1>
         </div>
         <div className="flex items-center gap-3">
-          <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-            task.difficulty === "hard" ? "bg-red-100 text-red-700"
-            : task.difficulty === "easy" ? "bg-green-100 text-green-700"
-            : "bg-yellow-100 text-yellow-700"
-          }`}>{task.difficulty}</span>
-          <span className="text-xs text-gray-500">
-            ⏱ {task.content.preparation_time_seconds}s prep · {task.content.speaking_time_seconds}s speak
-          </span>
+          <span className={`text-xs font-bold px-2 py-1 rounded-full ${task.difficulty === "hard" ? "bg-red-100 text-red-700" : task.difficulty === "easy" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{task.difficulty}</span>
+          <span className="text-xs text-gray-500">⏱ {task.content.preparation_time_seconds}s prep · {task.content.speaking_time_seconds}s speak</span>
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-3xl mx-auto px-6 py-8 space-y-4">
+        {error && <div className="bg-red-50 text-red-600 rounded-lg p-4 text-sm">❌ {error}</div>}
 
-        {error && (
-          <div className="bg-red-50 text-red-600 rounded-lg p-4 text-sm">❌ {error}</div>
-        )}
-
-        {/* IDLE — Show task */}
-        {phase === "idle" && (
+        {/* PREPARING */}
+        {phase === "preparing" && (
           <>
-            {/* Situation */}
             <div className="bg-white border border-gray-200 rounded-xl p-6">
               <div className="bg-purple-50 rounded-lg p-4 mb-4">
                 <p className="text-xs font-bold text-purple-600 uppercase mb-1">Situation</p>
                 <p className="text-gray-800">{task.content.situation}</p>
               </div>
-
-              {/* Task 3 — Single image */}
-              {task.content.image_url && (
-                <img src={task.content.image_url} alt="Task" className="w-full rounded-lg mb-4" style={{maxHeight:"350px", objectFit:"cover"}} />
+              {task.content.image_url && <img src={task.content.image_url} alt="Task" className="w-full rounded-lg mb-4" style={{maxHeight:"300px",objectFit:"cover"}} />}
+              {task.content.image_url_1 && !task.content.option_a && (
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <img src={task.content.image_url_1} alt="Image 1" className="w-full rounded-lg" style={{height:"160px",objectFit:"cover"}} />
+                  <img src={task.content.image_url_2} alt="Image 2" className="w-full rounded-lg" style={{height:"160px",objectFit:"cover"}} />
+                </div>
               )}
-
-              {/* Task 5 — Two options with selection */}
-              {task.content.option_a && task.content.option_b && (
-                <div className="space-y-4 mb-4">
-                  {/* Selection timer */}
-                  {selectingPhase && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
-                      <p className="text-blue-600 font-bold text-sm mb-1">⏱ Choose your option</p>
-                      <p className="text-4xl font-bold text-blue-600 font-mono">{selectionTimeLeft}</p>
-                      <p className="text-xs text-blue-500 mt-1">Recording starts automatically after selection or when timer ends</p>
-                    </div>
-                  )}
+              {taskNum === 5 && task.content.option_a && task.content.option_b && (
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-3">Click to select your option. Timer continues.</p>
                   <div className="grid grid-cols-2 gap-3">
                     {(["A","B"] as const).map(opt => {
                       const option = opt === "A" ? task.content.option_a : task.content.option_b;
                       const isSelected = selectedOption === opt;
                       return (
-                        <div key={opt} className={`border-2 rounded-xl overflow-hidden transition ${
-                          isSelected ? "border-purple-500" : "border-gray-200"
-                        }`}>
-                          {/* Image placeholder */}
-                          <div className="bg-gray-100 h-36 flex items-center justify-center text-gray-400 text-sm">
-                            🖼 {option?.label}
+                        <div key={opt} onClick={() => handleSelectOption(opt)}
+                          className={`border-2 rounded-xl overflow-hidden cursor-pointer transition ${isSelected ? "border-purple-500 ring-2 ring-purple-200" : "border-gray-200 hover:border-purple-300"}`}>
+                          {option?.image_url ? <img src={option.image_url} alt={option.label} className="w-full h-32 object-cover" /> : <div className="bg-gray-100 h-32 flex items-center justify-center text-gray-400 text-sm">🖼 {option?.label}</div>}
+                          <div className="p-2">
+                            <p className="font-bold text-gray-800 text-xs">{option?.label}</p>
+                            {option?.details && Object.entries(option.details).slice(0,3).map(([k,v]) => <p key={k} className="text-xs text-gray-500">• {v as string}</p>)}
+                            {isSelected && <p className="text-xs text-purple-600 font-bold mt-1">✓ Selected</p>}
                           </div>
-                          {/* Details */}
-                          <div className="p-3">
-                            <p className="font-bold text-gray-800 text-sm mb-2">{option?.label}</p>
-                            {option?.details && Object.entries(option.details).map(([k, v]) => (
-                              <p key={k} className="text-xs text-gray-600">• {v as string}</p>
-                            ))}
-                          </div>
-                          {selectingPhase && (
-                            <button onClick={() => handleSelectOption(opt)}
-                              className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold transition">
-                              Choose This Option
-                            </button>
-                          )}
-                          {isSelected && !selectingPhase && (
-                            <div className="w-full py-2 bg-purple-100 text-purple-700 text-sm font-bold text-center">
-                              ✓ Your Choice
-                            </div>
-                          )}
                         </div>
                       );
                     })}
                   </div>
                 </div>
               )}
-              {/* Old image format fallback */}
-              {task.content.image_url_1 && !task.content.option_a && (
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div>
-                    <p className="text-xs font-bold text-gray-500 mb-1 text-center">Picture 1</p>
-                    <img src={task.content.image_url_1} alt="Image 1" className="w-full rounded-lg" style={{height:"200px", objectFit:"cover"}} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-gray-500 mb-1 text-center">Picture 2</p>
-                    <img src={task.content.image_url_2} alt="Image 2" className="w-full rounded-lg" style={{height:"200px", objectFit:"cover"}} />
-                  </div>
-                </div>
-              )}
-
-              {/* Task 6 — Two options */}
-              {task.content.option_a && (
+              {taskNum === 6 && task.content.option_a && task.content.option_b && (
                 <div className="mb-4">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Choose ONE person to address:</p>
+                  <p className="text-sm text-gray-600 mb-3">Choose ONE person to address. Preparation timer is running.</p>
                   <div className="grid grid-cols-2 gap-3">
                     {(["A","B"] as const).map(opt => {
                       const option = opt === "A" ? task.content.option_a : task.content.option_b;
+                      const isSelected = selectedOption === opt;
                       return (
-                        <button key={opt} onClick={() => setSelectedOption(opt)}
-                          className={`p-4 rounded-xl border-2 text-left transition ${
-                            selectedOption === opt ? "border-purple-500 bg-purple-50" : "border-gray-200 hover:border-purple-300"
-                          }`}>
+                        <button key={opt} type="button" onClick={() => handleSelectOption(opt)}
+                          className={`p-4 rounded-xl border-2 text-left transition ${isSelected ? "border-purple-500 bg-purple-50 ring-2 ring-purple-200" : "border-gray-200 hover:border-purple-300"}`}>
                           <p className="text-xs font-bold text-purple-600 mb-1">Option {opt}</p>
                           <p className="text-sm font-semibold text-gray-800">{option?.person}</p>
                           <p className="text-xs text-gray-500 mt-1">{option?.instruction}</p>
+                          {isSelected && <p className="text-xs text-purple-600 font-bold mt-2">✓ Selected</p>}
                         </button>
                       );
                     })}
                   </div>
                 </div>
               )}
-
-              {/* Prompt */}
-              {task.content.prompt && (
-                <div className="mb-4">
-                  <p className="text-xs font-bold text-gray-500 uppercase mb-1">Your Task</p>
-                  <p className="text-gray-800 font-medium">{task.content.prompt}</p>
+              {taskNum === 6 && selectedOption && task.content.option_a && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
+                  <p className="text-xs font-bold text-purple-600">Chosen: Option {selectedOption}</p>
+                  <p className="text-sm text-gray-700">{selectedOption === "A" ? task.content.option_a?.person : task.content.option_b?.person}</p>
                 </div>
               )}
-
-              {/* Tips */}
+              {task.content.prompt && <p className="text-sm font-medium text-gray-800">{task.content.prompt}</p>}
               {task.content.tips?.length > 0 && (
-                <div className="bg-yellow-50 rounded-lg p-4 mb-4">
+                <div className="bg-yellow-50 rounded-lg p-4 mt-3">
                   <p className="text-xs font-bold text-yellow-700 mb-2">💡 Tips</p>
-                  <ul className="space-y-1">
-                    {task.content.tips.map((tip, i) => (
-                      <li key={i} className="text-xs text-yellow-800 flex gap-2">
-                        <span>•</span>{tip}
-                      </li>
-                    ))}
-                  </ul>
+                  <ul className="space-y-1">{task.content.tips.map((tip,i) => <li key={i} className="text-xs text-yellow-800 flex gap-2"><span>•</span>{tip}</li>)}</ul>
                 </div>
               )}
-
-              {taskNum === 6 && !selectedOption ? (
-              <p className="text-center text-sm text-purple-600 font-medium">👆 Select an option above to begin</p>
-            ) : (
-              <button onClick={startPreparation}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition">
-                ▶ Start Preparation Time
-              </button>
-            )}
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-600 font-bold text-sm">⏱ Preparation</span>
+                  <span className="text-blue-600 font-mono font-bold">{prepTimeLeft}s</span>
+                </div>
+                <button onClick={() => { if(timerRef.current) clearInterval(timerRef.current); startRecording(); }}
+                  className="text-xs text-blue-600 border border-blue-300 px-3 py-1 rounded-lg hover:bg-blue-100 transition">
+                  Skip → Start Recording
+                </button>
+              </div>
+              <div className="w-full bg-blue-200 rounded-full h-2">
+                <div className="bg-blue-500 h-2 rounded-full transition-all" style={{width:`${(prepTimeLeft/(task.content.preparation_time_seconds||30))*100}%`}} />
+              </div>
             </div>
           </>
         )}
 
-        {/* PREPARING */}
-        {phase === "preparing" && (
+        {/* RECORDING — same content as preparing, just replace timer bar */}
+        {phase === "recording" && (
           <>
-            {/* Task info still visible during prep */}
             <div className="bg-white border border-gray-200 rounded-xl p-6">
               <div className="bg-purple-50 rounded-lg p-4 mb-4">
                 <p className="text-xs font-bold text-purple-600 uppercase mb-1">Situation</p>
                 <p className="text-gray-800">{task.content.situation}</p>
               </div>
-              {task.content.image_url && (
-                <img src={task.content.image_url} alt="Task" className="w-full rounded-lg mb-4" style={{maxHeight:"300px", objectFit:"cover"}} />
-              )}
-              {task.content.image_url_1 && (
+              {task.content.image_url && <img src={task.content.image_url} alt="Task" className="w-full rounded-lg mb-4" style={{maxHeight:"300px",objectFit:"cover"}} />}
+              {task.content.image_url_1 && !task.content.option_a && (
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  <img src={task.content.image_url_1} alt="Image 1" className="w-full rounded-lg" style={{height:"180px", objectFit:"cover"}} />
-                  <img src={task.content.image_url_2} alt="Image 2" className="w-full rounded-lg" style={{height:"180px", objectFit:"cover"}} />
+                  <img src={task.content.image_url_1} alt="Image 1" className="w-full rounded-lg" style={{height:"160px",objectFit:"cover"}} />
+                  <img src={task.content.image_url_2} alt="Image 2" className="w-full rounded-lg" style={{height:"160px",objectFit:"cover"}} />
                 </div>
               )}
-              {task.content.option_a && selectedOption && (
+              {taskNum === 5 && task.content.option_a && task.content.option_b && (
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {(["A","B"] as const).map(opt => {
+                    const option = opt === "A" ? task.content.option_a : task.content.option_b;
+                    const isSelected = selectedOption === opt;
+                    return (
+                      <div key={opt} className={`border-2 rounded-xl overflow-hidden ${isSelected ? "border-purple-500" : "border-gray-200 opacity-60"}`}>
+                        {option?.image_url ? <img src={option.image_url} alt={option.label} className="w-full h-28 object-cover" /> : <div className="bg-gray-100 h-28 flex items-center justify-center text-gray-400 text-sm">🖼 {option?.label}</div>}
+                        <div className="p-2">
+                          <p className="font-bold text-gray-800 text-xs">{option?.label}</p>
+                          {isSelected && <p className="text-xs text-purple-600 font-bold">✓ Your choice</p>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {taskNum === 6 && selectedOption && task.content.option_a && (
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
-                  <p className="text-xs font-bold text-purple-600 mb-1">Option {selectedOption}</p>
-                  <p className="text-sm font-semibold text-gray-800">{selectedOption === "A" ? task.content.option_a?.person : task.content.option_b?.person}</p>
-                  <p className="text-xs text-gray-600 mt-1">{selectedOption === "A" ? task.content.option_a?.instruction : task.content.option_b?.instruction}</p>
+                  <p className="text-xs font-bold text-purple-600">Chosen: Option {selectedOption}</p>
+                  <p className="text-sm text-gray-700">{selectedOption === "A" ? task.content.option_a?.person : task.content.option_b?.person}</p>
                 </div>
               )}
-              {task.content.prompt && (
-                <p className="text-sm font-medium text-gray-800 mb-4">{task.content.prompt}</p>
+              {task.content.prompt && <p className="text-sm font-medium text-gray-800">{task.content.prompt}</p>}
+              {task.content.tips?.length > 0 && (
+                <div className="bg-yellow-50 rounded-lg p-4 mt-3">
+                  <p className="text-xs font-bold text-yellow-700 mb-2">💡 Tips</p>
+                  <ul className="space-y-1">{task.content.tips.map((tip,i) => <li key={i} className="text-xs text-yellow-800 flex gap-2"><span>•</span>{tip}</li>)}</ul>
+                </div>
               )}
             </div>
-            {/* Prep timer overlay at bottom */}
-            <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 text-center">
-              <p className="text-blue-600 font-bold mb-1">⏱ Preparation Time</p>
-              <p className="text-7xl font-bold text-blue-600 font-mono">{prepTimeLeft}</p>
-              <p className="text-sm text-blue-500 mt-2">Recording will start automatically</p>
-            </div>
+            {!showEvalBtn && <div className="bg-red-50 border-2 border-red-200 rounded-xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse" />
+                  <p className="text-red-600 font-bold">Recording...</p>
+                  <span className="text-red-600 font-mono font-bold">{recTimeLeft}s</span>
+                </div>
+                <button onClick={stopRecording} className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-5 rounded-xl transition text-sm">⏹ Stop</button>
+              </div>
+              <div className="w-full bg-red-200 rounded-full h-2">
+                <div className="bg-red-500 h-2 rounded-full transition-all" style={{width:`${(recTimeLeft/(task.content.speaking_time_seconds||60))*100}%`}} />
+              </div>
+              <p className="text-xs text-red-400 mt-2">Speak clearly • Click Stop when finished or wait for timer</p>
+            </div>}
+            {showEvalBtn && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-3">
+                <p className="text-green-700 font-bold text-center">✅ Recording complete</p>
+                <button onClick={goToEvaluation} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition">Get Evaluation →</button>
+
+              </div>
+            )}
           </>
         )}
 
-        {/* RECORDING */}
-        {phase === "recording" && (
-          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse" />
-              <p className="text-red-500 font-bold text-lg">Recording...</p>
+        {/* STOPPED */}
+        {phase === "stopped" && (
+          <>
+            <div className="bg-white border border-gray-200 rounded-xl p-6">
+              <div className="bg-purple-50 rounded-lg p-4 mb-4">
+                <p className="text-xs font-bold text-purple-600 uppercase mb-1">Situation</p>
+                <p className="text-gray-800">{task.content.situation}</p>
+              </div>
+              {task.content.prompt && <p className="text-sm font-medium text-gray-800">{task.content.prompt}</p>}
             </div>
-            <p className="text-9xl font-bold text-red-600 font-mono mb-4">{recTimeLeft}</p>
-            <p className="text-gray-500 mb-6">Speak clearly into your microphone</p>
-            <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
-              <p className="text-sm text-gray-700">{task.content.prompt || task.content.situation}</p>
+            <div className="bg-green-50 border border-green-200 rounded-xl p-5 space-y-3">
+              <p className="text-green-700 font-bold text-center">✅ Recording complete</p>
+              <button onClick={goToEvaluation} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition">Get Evaluation →</button>
+              <button onClick={resetTask} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2 transition">🔄 Re-record</button>
             </div>
-            <button onClick={stopRecording}
-              className="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-8 rounded-xl transition">
-              ⏹ Stop Recording Early
-            </button>
-          </div>
+          </>
         )}
 
         {/* PROCESSING */}
@@ -432,78 +398,48 @@ function SpeakingContent() {
           </div>
         )}
 
-        {/* DONE — Results */}
+        {/* DONE — results inline */}
         {phase === "done" && evaluation && (
           <div className="space-y-4">
-            {/* Transcript */}
-            <div className="bg-white border border-gray-200 rounded-xl p-6">
-              <h3 className="font-bold text-gray-800 mb-2">📝 Your Response</h3>
-              <p className="text-gray-700 italic bg-gray-50 rounded-lg p-4">"{transcript}"</p>
+            <div className="bg-white border border-gray-200 rounded-xl p-4">
+              <p className="text-xs font-bold text-gray-500 mb-2">📝 YOUR RESPONSE</p>
+              <p className="text-gray-700 italic text-sm">"{transcript}"</p>
             </div>
-
-            {/* Score */}
             <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
-              <p className={`text-7xl font-bold ${getBandColor(evaluation.overall_band)}`}>
-                {evaluation.overall_band}
-              </p>
-              <p className="text-gray-400 text-sm mt-1">Overall Band Score</p>
+              <p className={`text-7xl font-bold ${getBandColor(evaluation.overall_band)}`}>{evaluation.overall_band}</p>
+              <p className="text-gray-400 text-sm mt-1">Overall Band Score / 12</p>
             </div>
-
-            {/* Subscores */}
             <div className="grid grid-cols-2 gap-3">
-              {Object.entries(evaluation.subscores).map(([key, val]) => (
+              {Object.entries(evaluation.subscores || {}).map(([key, val]: any) => (
                 <div key={key} className="bg-white border border-gray-200 rounded-xl p-4">
                   <p className="text-xs text-gray-500 capitalize mb-1">{key.replace(/_/g," ")}</p>
-                  <p className={`text-2xl font-bold ${getBandColor(val)}`}>{val}<span className="text-gray-400 text-sm font-normal"> /12</span></p>
+                  <p className={`text-2xl font-bold ${getBandColor(val)}`}>{val}<span className="text-gray-400 text-sm"> /12</span></p>
                 </div>
               ))}
             </div>
-
-            {/* Strengths */}
             <div className="bg-white border border-gray-200 rounded-xl p-6">
               <h4 className="font-semibold text-green-700 mb-3">✅ Strengths</h4>
-              <ul className="space-y-2">
-                {evaluation.strengths.map((s, i) => (
-                  <li key={i} className="bg-green-50 text-green-800 rounded-lg p-3 text-sm">{s}</li>
-                ))}
-              </ul>
+              <ul className="space-y-2">{evaluation.strengths?.map((s:string,i:number) => <li key={i} className="bg-green-50 text-green-800 rounded-lg p-3 text-sm">{s}</li>)}</ul>
             </div>
-
-            {/* Areas to improve */}
             <div className="bg-white border border-gray-200 rounded-xl p-6">
               <h4 className="font-semibold text-orange-700 mb-3">📈 Areas to Improve</h4>
-              <ul className="space-y-2">
-                {evaluation.areas_to_improve.map((s, i) => (
-                  <li key={i} className="bg-orange-50 text-orange-800 rounded-lg p-3 text-sm">{s}</li>
-                ))}
-              </ul>
+              <ul className="space-y-2">{evaluation.areas_to_improve?.map((s:string,i:number) => <li key={i} className="bg-orange-50 text-orange-800 rounded-lg p-3 text-sm">{s}</li>)}</ul>
             </div>
-
-            {/* Detailed feedback */}
             <div className="bg-white border border-gray-200 rounded-xl p-6">
               <h4 className="font-semibold text-gray-700 mb-2">💬 Detailed Feedback</h4>
-              <p className="bg-gray-50 rounded-lg p-4 text-gray-700 text-sm leading-relaxed">{evaluation.detailed_feedback}</p>
+              <p className="bg-gray-50 rounded-lg p-4 text-gray-700 text-sm">{evaluation.detailed_feedback}</p>
             </div>
-
-            {/* Sample response */}
             <div className="bg-white border border-gray-200 rounded-xl p-6">
               <h4 className="font-semibold text-purple-700 mb-2">✨ Sample Improved Response</h4>
-              <p className="bg-purple-50 rounded-lg p-4 text-purple-800 text-sm italic leading-relaxed">{evaluation.sample_improved_response}</p>
+              <p className="bg-purple-50 rounded-lg p-4 text-purple-800 text-sm italic">{evaluation.sample_improved_response}</p>
             </div>
-
-            {/* Actions */}
             <div className="flex gap-3">
-              <button onClick={resetTask}
-                className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition">
-                🔄 Try Again
-              </button>
-              <Link href="/practice/speaking"
-                className="flex-1 text-center bg-white border border-gray-200 text-gray-700 font-semibold py-3 rounded-xl hover:bg-gray-50 transition">
-                ← Back to Library
-              </Link>
+              <button onClick={resetTask} className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition">🔄 Try Again</button>
+              <Link href="/practice/speaking" className="flex-1 text-center bg-white border border-gray-200 text-gray-700 font-semibold py-3 rounded-xl hover:bg-gray-50 transition">← Back to Library</Link>
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

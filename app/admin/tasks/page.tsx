@@ -76,7 +76,7 @@ export default function TasksPage() {
     let title = "";
 
     if (taskType === "Writing Task 1" || taskType === "Writing Task 2") {
-      endpoint = "/api/admin/tasks/generate";
+      endpoint = "/api/admin/writing/generate";
       body = { taskType };
     } else if (taskType.includes("Reading")) {
       endpoint = "/api/admin/reading/generate";
@@ -110,7 +110,7 @@ export default function TasksPage() {
 
     // Extract title based on task type
     if (taskType.includes("Writing")) {
-      title = taskContent.scenario?.slice(0, 80) || taskType;
+      title = (taskContent.topic || taskContent.scenario || "").slice(0, 80) || taskType;
     } else if (taskType.includes("Reading")) {
       title = taskContent.title || taskType;
     } else if (taskType.includes("Speaking")) {

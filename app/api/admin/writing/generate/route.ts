@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 const client = new Anthropic();
 
+/** CELPIP Writing Task 1 & 2 generation for admin (and public demo callers). */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -53,7 +54,7 @@ Topics: workplace scheduling, complaints to businesses, requests for information
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
       system: `You are a certified CELPIP examiner. Generate realistic original mock test tasks matching the official CELPIP format exactly. Return raw JSON only. No markdown. No backticks. No explanation.`,
-      messages: [{ role: "user", content: userPrompt }]
+      messages: [{ role: "user", content: userPrompt }],
     });
 
     const block = response.content[0];
@@ -61,9 +62,8 @@ Topics: workplace scheduling, complaints to businesses, requests for information
     const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
     const task = JSON.parse(cleaned);
     return NextResponse.json(task);
-
   } catch (error) {
-    console.error("Error:", error);
+    console.error("admin writing generate:", error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
