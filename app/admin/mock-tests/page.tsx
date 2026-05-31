@@ -1,23 +1,36 @@
 "use client";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import {
+  MOCK_TEST_SKILLS,
+  type MockTestSkill,
+  getAdminSequenceForSkill,
+  tasksForSlot,
+  type MockTestTaskRow,
+} from "../../lib/mock-test-types";
+import {
+  collapseSpeakingFullIds,
+  expandSpeakingAdminPicks,
+  findPairedSpeakingTask4,
+  formatSpeaking34PickLabel,
+  isSpeakingPair34Slot,
+  speakingTask3WithPairChoices,
+  type SpeakingTaskRow,
+} from "../../lib/speaking-task-pairs";
 
 type MockTest = {
   id: string;
   title: string;
-  description: string;
+  description: string | null;
+  test_type: MockTestSkill | null;
   is_published: boolean;
   time_limit_minutes: number;
   created_at: string;
+  mock_test_tasks?: { count: number }[];
 };
 
-type Task = {
-  id: string;
-  task_type: string;
-  difficulty: string;
-  title: string;
-  content: unknown;
-};
+type Task = SpeakingTaskRow & { id: string; difficulty?: string };
 
 type MockTestTask = {
   id: string;
@@ -27,240 +40,157 @@ type MockTestTask = {
   admin_tasks: Task;
 };
 
-const SKILL_SECTIONS = ["Listening", "Reading", "Writing", "Speaking"] as const;
-type SkillSection = (typeof SKILL_SECTIONS)[number];
+type GuidedPick = { key: string; taskId: string; taskTypeLabel: string };
 
-type GuidedKind = "full" | SkillSection | "custom";
-
-type GuidedPick = {
-  key: string;
-  section: SkillSection;
-  taskId: string;
-  taskTypeLabel: string;
-};
-
-/** Strong contrast for native selects (options often inherit poorly on Windows). */
 const SELECT_DARK =
   "w-full p-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 bg-white shadow-sm " +
-  "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 " +
-  "[color-scheme:light]";
-
-type SequenceSlot = {
-  section: SkillSection;
-  /** Shown to admin as the current step. */
-  stepTitle: string;
-  /** Only tasks matching this slot (current sequence position), not the whole skill. */
-  matches: (t: Task) => boolean;
-};
-
-const LISTENING_ORDER = [
-  "Listening - Problem Solving",
-  "Listening - Daily Life Conversation",
-  "Listening - Listening for Information",
-  "Listening - News Item",
-  "Listening - Discussion",
-  "Listening - Viewpoints",
-] as const;
-
-const READING_ORDER = [
-  "Reading Correspondence",
-  "Reading to Apply Information",
-  "Reading for Information",
-  "Reading for Viewpoints",
-] as const;
-
-const READING_ALIASES: Record<string, string[]> = {
-  "Reading Correspondence": ["Task 1: Correspondence"],
-  "Reading to Apply Information": ["Task 2: to Apply Information"],
-  "Reading for Information": ["Task 3: Information"],
-  "Reading for Viewpoints": ["Task 4: Viewpoints"],
-};
-
-const WRITING_ORDER = ["Writing Task 1", "Writing Task 2"] as const;
-
-const SPEAKING_ORDER = ["Speaking Task 1", "Speaking Task 2", "Speaking Task 3", "Speaking Task 4", "Speaking Task 5", "Speaking Task 6", "Speaking Task 7", "Speaking Task 8"] as const;
-
-function taskMatchesSlotType(t: Task, primary: string, aliases: readonly string[] = []): boolean {
-  if (t.task_type === primary) return true;
-  for (const a of aliases) {
-    if (t.task_type === a) return true;
-  }
-  if (primary.startsWith("Listening -")) {
-    const tail = primary.replace(/^Listening - /, "");
-    return t.task_type.includes("Listening") && t.task_type.includes(tail);
-  }
-  return false;
-}
-
-function slotFromListeningType(type: (typeof LISTENING_ORDER)[number]): SequenceSlot {
-  const short = type.replace("Listening - ", "");
-  return {
-    section: "Listening",
-    stepTitle: `Listening — ${short}`,
-    matches: t => taskMatchesSlotType(t, type),
-  };
-}
-
-function slotFromReadingType(type: (typeof READING_ORDER)[number]): SequenceSlot {
-  const aliases = READING_ALIASES[type] || [];
-  return {
-    section: "Reading",
-    stepTitle: `Reading — ${type.replace(/^Reading /, "")}`,
-    matches: t => taskMatchesSlotType(t, type, aliases),
-  };
-}
-
-function slotFromWritingType(type: (typeof WRITING_ORDER)[number]): SequenceSlot {
-  return {
-    section: "Writing",
-    stepTitle: type,
-    matches: t => t.task_type === type,
-  };
-}
-
-function slotFromSpeakingType(type: (typeof SPEAKING_ORDER)[number]): SequenceSlot {
-  return {
-    section: "Speaking",
-    stepTitle: type,
-    matches: t => t.task_type === type,
-  };
-}
-
-function getSequenceForKind(kind: GuidedKind): SequenceSlot[] | null {
-  if (kind === "custom") return null;
-  if (kind === "full") {
-    return [
-      ...LISTENING_ORDER.map(slotFromListeningType),
-      ...READING_ORDER.map(slotFromReadingType),
-      ...WRITING_ORDER.map(slotFromWritingType),
-      ...SPEAKING_ORDER.map(slotFromSpeakingType),
-    ];
-  }
-  if (kind === "Listening") return LISTENING_ORDER.map(slotFromListeningType);
-  if (kind === "Reading") return READING_ORDER.map(slotFromReadingType);
-  if (kind === "Writing") return WRITING_ORDER.map(slotFromWritingType);
-  if (kind === "Speaking") return SPEAKING_ORDER.map(slotFromSpeakingType);
-  return [];
-}
-
-function tasksForSlot(tasks: Task[], slot: SequenceSlot): Task[] {
-  return tasks.filter(slot.matches);
-}
-
-function inferSectionFromTaskType(taskType: string): SkillSection {
-  if (taskType.includes("Listening")) return "Listening";
-  if (taskType.includes("Speaking")) return "Speaking";
-  if (taskType.includes("Writing")) return "Writing";
-  const readingAliases = Object.values(READING_ALIASES).flat();
-  if (
-    taskType.includes("Reading") ||
-    (READING_ORDER as readonly string[]).includes(taskType) ||
-    readingAliases.includes(taskType)
-  ) {
-    return "Reading";
-  }
-  return "Reading";
-}
+  "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 [color-scheme:light]";
 
 function newKey() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function buildAutoRecordName(picks: { section: string }[]): string {
-  const counts: Record<string, number> = {};
-  return picks
-    .map(p => {
-      const key = p.section.trim().toLowerCase();
-      counts[key] = (counts[key] || 0) + 1;
-      return `${key}-${counts[key]}`;
-    })
-    .join(".");
-}
-
-function uniqueSortedTaskTypes(tasks: Task[]): string[] {
-  const s = new Set(tasks.map(t => t.task_type).filter(Boolean));
-  return [...s].sort((a, b) => a.localeCompare(b));
-}
+const SKILL_LABELS: Record<MockTestSkill, string> = {
+  Listening: "Listening only (6 parts in order)",
+  Reading: "Reading only (4 parts in order)",
+  Writing: "Writing only (2 tasks in order)",
+  Speaking: "Speaking only (7 picks — Task 3 auto-includes paired Task 4)",
+};
 
 export default function MockTestsPage() {
   const [mockTests, setMockTests] = useState<MockTest[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [assignedTaskIds, setAssignedTaskIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [creating, setCreating] = useState(false);
+
+  const [showBuilder, setShowBuilder] = useState(false);
+  const [skill, setSkill] = useState<MockTestSkill>("Reading");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [timeLimit, setTimeLimit] = useState(60);
+  const [picks, setPicks] = useState<GuidedPick[]>([]);
+  const [pendingTaskId, setPendingTaskId] = useState("");
+
   const [selectedTest, setSelectedTest] = useState<MockTest | null>(null);
   const [testTasks, setTestTasks] = useState<MockTestTask[]>([]);
   const [loadingTestTasks, setLoadingTestTasks] = useState(false);
 
-  const [newTitle, setNewTitle] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [newTimeLimit, setNewTimeLimit] = useState(120);
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editTimeLimit, setEditTimeLimit] = useState(60);
+  const [editTaskIds, setEditTaskIds] = useState<string[]>([]);
+  const [savingEdit, setSavingEdit] = useState(false);
 
-  const [selectedTaskId, setSelectedTaskId] = useState("");
-  const [selectedSection, setSelectedSection] = useState("Writing");
+  const sequence = useMemo(() => getAdminSequenceForSkill(skill), [skill]);
+  const currentSlot = picks.length < sequence.length ? sequence[picks.length] : null;
 
-  const [showGuidedWizard, setShowGuidedWizard] = useState(false);
-  const [guidedKind, setGuidedKind] = useState<GuidedKind>("full");
-  const [guidedPicks, setGuidedPicks] = useState<GuidedPick[]>([]);
-  const [guidedPendingTaskId, setGuidedPendingTaskId] = useState("");
-  const [guidedTimeLimit, setGuidedTimeLimit] = useState(180);
-  const [guidedTitleOverride, setGuidedTitleOverride] = useState("");
+  const availableTasks = useMemo(() => {
+    return tasks.filter(t => !assignedTaskIds.has(t.id));
+  }, [tasks, assignedTaskIds]);
 
-  const [customTaskType, setCustomTaskType] = useState("");
-
-  const sequence = useMemo(() => getSequenceForKind(guidedKind), [guidedKind]);
-
-  const clearGuidedWizard = useCallback(() => {
-    setGuidedPicks([]);
-    setGuidedPendingTaskId("");
-    setCustomTaskType("");
-  }, []);
-
-  useEffect(() => {
-    loadMockTests();
-    loadTasks();
-  }, []);
-
-  useEffect(() => {
-    if (!showGuidedWizard) return;
-    clearGuidedWizard();
-  }, [guidedKind, showGuidedWizard, clearGuidedWizard]);
-
-  const currentSlot = sequence && guidedPicks.length < sequence.length ? sequence[guidedPicks.length] : null;
-
-  const choicesForCurrentStep = useMemo(() => {
-    if (guidedKind === "custom") {
-      if (!customTaskType) return [];
-      return tasks.filter(t => t.task_type === customTaskType);
-    }
+  const choicesForStep = useMemo(() => {
     if (!currentSlot) return [];
-    return tasksForSlot(tasks, currentSlot);
-  }, [guidedKind, customTaskType, tasks, currentSlot]);
+    if (skill === "Speaking" && isSpeakingPair34Slot(currentSlot)) {
+      return speakingTask3WithPairChoices(availableTasks, assignedTaskIds);
+    }
+    return tasksForSlot(availableTasks, currentSlot);
+  }, [availableTasks, currentSlot, skill]);
 
-  const autoRecordName = useMemo(() => buildAutoRecordName(guidedPicks), [guidedPicks]);
+  const sequenceComplete = picks.length === sequence.length;
 
-  const sequenceComplete =
-    guidedKind === "custom"
-      ? guidedPicks.length >= 1
-      : Boolean(sequence && guidedPicks.length === sequence.length);
+  const editSkill = selectedTest?.test_type as MockTestSkill | null;
+  const editSequence = useMemo(
+    () => (editSkill ? getAdminSequenceForSkill(editSkill) : []),
+    [editSkill],
+  );
 
-  async function loadMockTests() {
-    setLoading(true);
-    const { data } = await supabase
-      .from("mock_tests")
-      .select("*")
-      .order("created_at", { ascending: false });
-    setMockTests(data || []);
-    setLoading(false);
+  const thisMockTaskIds = useMemo(
+    () => new Set(testTasks.map(mt => mt.task_id)),
+    [testTasks],
+  );
+
+  const assignedElsewhere = useMemo(() => {
+    const s = new Set(assignedTaskIds);
+    for (const id of thisMockTaskIds) s.delete(id);
+    return s;
+  }, [assignedTaskIds, thisMockTaskIds]);
+
+  function tasksSelectableForEditSlot(slotIndex: number): Task[] {
+    if (!editSkill || !editSequence[slotIndex]) return [];
+    const slot = editSequence[slotIndex];
+    const blocked = new Set(assignedElsewhere);
+    for (let i = 0; i < editTaskIds.length; i++) {
+      if (i !== slotIndex && editTaskIds[i]) blocked.add(editTaskIds[i]);
+    }
+    if (editSkill === "Speaking" && isSpeakingPair34Slot(slot)) {
+      const currentId = editTaskIds[slotIndex];
+      if (currentId) blocked.delete(currentId);
+      const pool = tasks.filter(t => !blocked.has(t.id) || t.id === currentId);
+      let opts = speakingTask3WithPairChoices(pool, blocked);
+      if (currentId && !opts.some(t => t.id === currentId)) {
+        const cur = tasks.find(t => t.id === currentId);
+        if (cur) opts = [cur, ...opts];
+      }
+      return opts;
+    }
+    return tasks.filter(t => {
+      if (!slot.matches(t)) return false;
+      const id = t.id;
+      if (editTaskIds[slotIndex] === id) return true;
+      if (editTaskIds.some((picked, i) => i !== slotIndex && picked === id)) return false;
+      if (!assignedElsewhere.has(id)) return true;
+      return false;
+    });
   }
 
-  async function loadTasks() {
-    const { data } = await supabase
-      .from("admin_tasks")
-      .select("*")
-      .order("task_type");
-    setTasks(data || []);
+  const editTasksComplete =
+    editSequence.length > 0 &&
+    editTaskIds.length === editSequence.length &&
+    editTaskIds.every(id => Boolean(id));
+
+  const resetBuilder = useCallback(() => {
+    setPicks([]);
+    setPendingTaskId("");
+    setTitle("");
+    setDescription("");
+  }, []);
+
+  useEffect(() => {
+    void loadAll();
+  }, []);
+
+  useEffect(() => {
+    if (!showBuilder) return;
+    resetBuilder();
+  }, [skill, showBuilder, resetBuilder]);
+
+  async function authHeaders(): Promise<HeadersInit> {
+    const { data: { session } } = await supabase.auth.getSession();
+    return {
+      Authorization: `Bearer ${session?.access_token || ""}`,
+      "Content-Type": "application/json",
+    };
+  }
+
+  async function loadAll() {
+    setLoading(true);
+    const headers = await authHeaders();
+    const res = await fetch("/api/admin/mock-tests", { headers });
+    if (res.ok) {
+      const json = await res.json();
+      setMockTests(json.tests || []);
+      setAssignedTaskIds(new Set(json.assignedTaskIds || []));
+    } else {
+      const { data } = await supabase.from("mock_tests").select("*").order("created_at", { ascending: true });
+      setMockTests(data || []);
+    }
+
+    const { data: taskRows } = await supabase.from("admin_tasks").select("*").order("task_type");
+    setTasks(taskRows || []);
+    setLoading(false);
   }
 
   async function loadTestTasks(testId: string) {
@@ -275,133 +205,88 @@ export default function MockTestsPage() {
   }
 
   async function createMockTest() {
-    if (!newTitle.trim()) {
-      setMessage("Please enter a title.");
+    if (!title.trim()) {
+      setMessage("Please enter a title for this mock test.");
       return;
     }
-    setCreating(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    const { error } = await supabase
-      .from("mock_tests")
-      .insert({
-        title: newTitle,
-        description: newDescription,
-        time_limit_minutes: newTimeLimit,
-        created_by: session?.user?.id,
-      });
-
-    if (error) {
-      setMessage("Error: " + error.message);
-    } else {
-      setMessage("Mock test created!");
-      setNewTitle("");
-      setNewDescription("");
-      setNewTimeLimit(120);
-      setShowCreateForm(false);
-      loadMockTests();
-    }
-    setCreating(false);
-    setTimeout(() => setMessage(""), 3000);
-  }
-
-  async function createGuidedMockTest() {
-    if (guidedKind !== "custom" && sequence && guidedPicks.length !== sequence.length) {
-      setMessage("Finish every step in order before creating the record.");
-      setTimeout(() => setMessage(""), 4000);
-      return;
-    }
-    if (guidedKind === "custom" && guidedPicks.length === 0) {
-      setMessage("Add at least one task using the custom flow.");
-      setTimeout(() => setMessage(""), 4000);
+    if (!sequenceComplete) {
+      setMessage(`Select all ${sequence.length} tasks in order before creating.`);
       return;
     }
 
-    const slug = buildAutoRecordName(guidedPicks);
-    const title = guidedTitleOverride.trim() || slug;
-    const description = `Auto record: ${slug}`;
-
-    setCreating(true);
-    const { data: { session } } = await supabase.auth.getSession();
-
-    const { data: inserted, error: testErr } = await supabase
-      .from("mock_tests")
-      .insert({
-        title,
-        description,
-        time_limit_minutes: guidedTimeLimit,
-        created_by: session?.user?.id,
-      })
-      .select("id")
-      .single();
-
-    if (testErr || !inserted) {
-      setMessage("Error creating mock test: " + (testErr?.message || "unknown"));
-      setCreating(false);
-      setTimeout(() => setMessage(""), 5000);
-      return;
-    }
-
-    const rows = guidedPicks.map((p, i) => ({
-      mock_test_id: inserted.id,
-      task_id: p.taskId,
-      order_number: i + 1,
-      section: p.section,
-    }));
-
-    const { error: tasksErr } = await supabase.from("mock_test_tasks").insert(rows);
-
-    if (tasksErr) {
-      setMessage(
-        "Mock test created but tasks failed: " + tasksErr.message + " — remove the empty test in the dashboard if needed."
+    if (skill === "Speaking") {
+      const expanded = expandSpeakingAdminPicks(
+        picks.map(p => p.taskId),
+        tasks,
       );
-      await supabase.from("mock_tests").delete().eq("id", inserted.id);
+      if (!expanded.ok) {
+        setMessage("Error: " + expanded.error);
+        return;
+      }
+    }
+
+    setCreating(true);
+    const headers = await authHeaders();
+    const res = await fetch("/api/admin/mock-tests", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        test_type: skill,
+        time_limit_minutes: timeLimit,
+        task_ids: picks.map(p => p.taskId),
+      }),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMessage("Error: " + (json.error || res.statusText));
     } else {
-      setMessage(`Created mock test "${title}" (${slug}).`);
-      setShowGuidedWizard(false);
-      setGuidedTitleOverride("");
-      loadMockTests();
+      setMessage(`Created mock test "${title.trim()}".`);
+      setShowBuilder(false);
+      resetBuilder();
+      await loadAll();
       setSelectedTest(null);
     }
     setCreating(false);
     setTimeout(() => setMessage(""), 5000);
   }
 
-  function addSequencedPick() {
-    if (!guidedPendingTaskId || !currentSlot) return;
-    const task = tasks.find(t => t.id === guidedPendingTaskId);
+  function addPick() {
+    if (!pendingTaskId || !currentSlot) return;
+    const task = tasks.find(t => t.id === pendingTaskId);
     if (!task) return;
-    setGuidedPicks(prev => [
-      ...prev,
-      {
-        key: newKey(),
-        section: currentSlot.section,
-        taskId: task.id,
-        taskTypeLabel: task.task_type,
-      },
-    ]);
-    setGuidedPendingTaskId("");
+
+    if (skill === "Speaking" && isSpeakingPair34Slot(currentSlot)) {
+      const pair = findPairedSpeakingTask4(task, tasks);
+      if (!pair) {
+        setMessage(
+          "Error: This Speaking Task 3 has no paired Task 4. Open it in Tasks → Create paired Task 4, or generate a new 3+4 pair.",
+        );
+        setTimeout(() => setMessage(""), 6000);
+        return;
+      }
+      setPicks(prev => [
+        ...prev,
+        {
+          key: newKey(),
+          taskId: task.id,
+          taskTypeLabel: formatSpeaking34PickLabel(task, pair),
+        },
+      ]);
+    } else {
+      setPicks(prev => [
+        ...prev,
+        { key: newKey(), taskId: task.id, taskTypeLabel: task.task_type },
+      ]);
+    }
+    setPendingTaskId("");
   }
 
-  function addCustomPick() {
-    if (!guidedPendingTaskId || !customTaskType) return;
-    const task = tasks.find(t => t.id === guidedPendingTaskId);
-    if (!task) return;
-    const section = inferSectionFromTaskType(task.task_type);
-    setGuidedPicks(prev => [
-      ...prev,
-      {
-        key: newKey(),
-        section,
-        taskId: task.id,
-        taskTypeLabel: task.task_type,
-      },
-    ]);
-    setGuidedPendingTaskId("");
-  }
-
-  function removeLastPick() {
-    setGuidedPicks(prev => prev.slice(0, -1));
-    setGuidedPendingTaskId("");
+  function undoLastPick() {
+    setPicks(prev => prev.slice(0, -1));
+    setPendingTaskId("");
   }
 
   async function togglePublish(test: MockTest) {
@@ -409,153 +294,151 @@ export default function MockTestsPage() {
       .from("mock_tests")
       .update({ is_published: !test.is_published })
       .eq("id", test.id);
-
-    if (error) {
-      setMessage("Error: " + error.message);
-    } else {
-      setMessage(test.is_published ? "Test unpublished!" : "Test published!");
-      loadMockTests();
-    }
+    setMessage(error ? "Error: " + error.message : test.is_published ? "Unpublished." : "Published.");
+    await loadAll();
     setTimeout(() => setMessage(""), 3000);
   }
 
   async function deleteTest(testId: string) {
-    if (!confirm("Delete this mock test? This cannot be undone.")) return;
+    if (!confirm("Delete this mock test? Tasks will become available for other mocks.")) return;
     const { error } = await supabase.from("mock_tests").delete().eq("id", testId);
-
-    if (error) {
-      setMessage("Error: " + error.message);
-    } else {
-      setMessage("Mock test deleted!");
-      if (selectedTest?.id === testId) setSelectedTest(null);
-      loadMockTests();
-    }
-    setTimeout(() => setMessage(""), 3000);
-  }
-
-  async function addTaskToTest() {
-    if (!selectedTest || !selectedTaskId) return;
-
-    const { error } = await supabase.from("mock_test_tasks").insert({
-      mock_test_id: selectedTest.id,
-      task_id: selectedTaskId,
-      order_number: testTasks.length + 1,
-      section: selectedSection,
-    });
-
-    if (error) {
-      setMessage("Error: " + error.message);
-    } else {
-      setMessage("Task added to test!");
-      loadTestTasks(selectedTest.id);
-      setSelectedTaskId("");
-    }
-    setTimeout(() => setMessage(""), 3000);
-  }
-
-  async function removeTaskFromTest(mockTestTaskId: string) {
-    const { error } = await supabase.from("mock_test_tasks").delete().eq("id", mockTestTaskId);
-
-    if (error) {
-      setMessage("Error: " + error.message);
-    } else {
-      setMessage("Task removed!");
-      if (selectedTest) loadTestTasks(selectedTest.id);
-    }
+    setMessage(error ? "Error: " + error.message : "Mock test deleted.");
+    if (selectedTest?.id === testId) setSelectedTest(null);
+    await loadAll();
     setTimeout(() => setMessage(""), 3000);
   }
 
   function openTest(test: MockTest) {
     setSelectedTest(test);
-    loadTestTasks(test.id);
+    setEditing(false);
+    void loadTestTasks(test.id);
   }
 
-  const singleSkillOptions: { value: SkillSection; label: string }[] = [
-    { value: "Listening", label: "Listening only (6 parts in order)" },
-    { value: "Reading", label: "Reading only (4 parts in order)" },
-    { value: "Writing", label: "Writing only (2 tasks in order)" },
-    { value: "Speaking", label: "Speaking only (8 tasks in order)" },
-  ];
+  function startEditing() {
+    if (!selectedTest?.test_type) {
+      setMessage("Error: This mock has no skill type set. Recreate it or set test_type in Supabase.");
+      return;
+    }
+    const ordered = [...testTasks].sort((a, b) => a.order_number - b.order_number);
+    const fullIds = ordered.map(mt => mt.task_id);
+    setEditTitle(selectedTest.title);
+    setEditDescription(selectedTest.description || "");
+    setEditTimeLimit(selectedTest.time_limit_minutes);
+    setEditTaskIds(
+      selectedTest.test_type === "Speaking"
+        ? collapseSpeakingFullIds(fullIds, tasks)
+        : fullIds,
+    );
+    setEditing(true);
+  }
 
-  const uniqueTypes = useMemo(() => uniqueSortedTaskTypes(tasks), [tasks]);
+  function cancelEditing() {
+    setEditing(false);
+  }
 
-  const stepProgressText =
-    guidedKind === "custom"
-      ? `Custom — ${guidedPicks.length} task(s) added`
-      : sequence
-        ? `Step ${Math.min(guidedPicks.length + 1, sequence.length)} of ${sequence.length}`
-        : "";
+  function setEditSlotTask(slotIndex: number, taskId: string) {
+    setEditTaskIds(prev => {
+      const next = [...prev];
+      while (next.length <= slotIndex) next.push("");
+      next[slotIndex] = taskId;
+      return next;
+    });
+  }
+
+  async function saveEdit() {
+    if (!selectedTest || !editTitle.trim()) {
+      setMessage("Title is required.");
+      return;
+    }
+    if (!editTasksComplete) {
+      setMessage("Select a task for every part.");
+      return;
+    }
+
+    if (selectedTest.test_type === "Speaking") {
+      const expanded = expandSpeakingAdminPicks(editTaskIds, tasks);
+      if (!expanded.ok) {
+        setMessage("Error: " + expanded.error);
+        return;
+      }
+    }
+
+    setSavingEdit(true);
+    const headers = await authHeaders();
+    const res = await fetch(`/api/admin/mock-tests/${selectedTest.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
+        title: editTitle.trim(),
+        description: editDescription.trim() || null,
+        time_limit_minutes: editTimeLimit,
+        task_ids: editTaskIds,
+      }),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMessage("Error: " + (json.error || res.statusText));
+    } else {
+      setMessage("Mock test updated.");
+      setEditing(false);
+      if (json.test) {
+        setSelectedTest(json.test);
+        setTestTasks(json.test.mock_test_tasks || []);
+      } else {
+        await loadTestTasks(selectedTest.id);
+      }
+      await loadAll();
+    }
+    setSavingEdit(false);
+    setTimeout(() => setMessage(""), 5000);
+  }
 
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">Mock Test Management</h1>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setShowGuidedWizard(v => !v);
-              setShowCreateForm(false);
-            }}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg transition"
-          >
-            {showGuidedWizard ? "Close guided builder" : "Guided mock test"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setShowCreateForm(v => !v);
-              setShowGuidedWizard(false);
-            }}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition"
-          >
-            + Manual create
-          </button>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800">Mock Test Management</h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Each mock is one skill only. Pick tasks from the library. Select a mock to edit its tasks anytime.
+          </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowBuilder(v => !v)}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg transition"
+        >
+          {showBuilder ? "Close builder" : "+ New mock test"}
+        </button>
       </div>
 
       {message && (
         <div
           className={`rounded-lg p-3 mb-4 text-sm ${
-            message.includes("Error") || message.includes("failed")
-              ? "bg-red-50 text-red-700"
-              : "bg-green-50 text-green-700"
+            message.includes("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
           }`}
         >
           {message}
         </div>
       )}
 
-      {showGuidedWizard && (
-        <div className="bg-white rounded-xl shadow-lg border border-indigo-100 p-6 mb-8 space-y-6">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">Guided mock test builder</h2>
-            <p className="text-sm text-gray-700 mt-1">
-              Add tasks <strong>one at a time</strong>. For each step, the task list is filtered to the{" "}
-              <strong>current position in the sequence</strong> (for example only &quot;Listening — Problem Solving&quot; for
-              part 1), not every listening task in your library.
-            </p>
-          </div>
+      {showBuilder && (
+        <div className="bg-white rounded-xl shadow-lg border border-indigo-100 p-6 mb-8 space-y-5">
+          <h2 className="text-lg font-bold text-gray-900">Create mock test</h2>
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-800 mb-1">Mock test type</label>
+              <label className="block text-sm font-medium text-gray-800 mb-1">Skill (one type per mock)</label>
               <select
-                value={guidedKind === "full" || guidedKind === "custom" ? guidedKind : guidedKind}
-                onChange={e => {
-                  const v = e.target.value;
-                  if (v === "full" || v === "custom") setGuidedKind(v);
-                  else setGuidedKind(v as SkillSection);
-                }}
+                value={skill}
+                onChange={e => setSkill(e.target.value as MockTestSkill)}
                 className={SELECT_DARK}
               >
-                <option value="full">Full CELPIP sequence (20 steps: L6 → R4 → W2 → S8)</option>
-                {singleSkillOptions.map(o => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
+                {MOCK_TEST_SKILLS.map(s => (
+                  <option key={s} value={s}>
+                    {SKILL_LABELS[s]}
                   </option>
                 ))}
-                <option value="custom">Custom — choose exact task type, then one task per step</option>
               </select>
             </div>
             <div>
@@ -563,237 +446,114 @@ export default function MockTestsPage() {
               <input
                 type="number"
                 min={1}
-                value={guidedTimeLimit}
-                onChange={e => setGuidedTimeLimit(Number(e.target.value) || 120)}
+                value={timeLimit}
+                onChange={e => setTimeLimit(Number(e.target.value) || 60)}
                 className={SELECT_DARK}
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-800 mb-1">Display title (optional)</label>
+            <label className="block text-sm font-medium text-gray-800 mb-1">Title (required)</label>
             <input
               type="text"
-              value={guidedTitleOverride}
-              onChange={e => setGuidedTitleOverride(e.target.value)}
-              placeholder={autoRecordName || "Uses auto record name when empty"}
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="e.g. Reading Mock — March 2026"
               className={SELECT_DARK}
             />
-            <p className="text-xs text-gray-600 mt-1">
-              Auto record name: <code className="bg-gray-100 px-1 rounded text-gray-900">{autoRecordName || "—"}</code>
-            </p>
           </div>
 
-          {/* Chosen so far */}
+          <div>
+            <label className="block text-sm font-medium text-gray-800 mb-1">Description (optional)</label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              className={`${SELECT_DARK} h-20 resize-none`}
+            />
+          </div>
+
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <div className="flex justify-between items-center mb-2">
-              <p className="text-sm font-semibold text-gray-900">Chosen order ({guidedPicks.length})</p>
-              <p className="text-xs font-medium text-gray-700">{stepProgressText}</p>
-            </div>
-            {guidedPicks.length === 0 ? (
-              <p className="text-sm text-gray-600">No tasks yet. Use the current step below.</p>
+            <p className="text-sm font-semibold text-gray-900 mb-2">
+              Chosen tasks ({picks.length} / {sequence.length})
+            </p>
+            {picks.length === 0 ? (
+              <p className="text-sm text-gray-600">Use the step below to add tasks in exam order.</p>
             ) : (
-              <ol className="list-decimal list-inside space-y-1 text-sm text-gray-900">
-                {guidedPicks.map((p, i) => (
+              <ol className="list-decimal list-inside text-sm text-gray-900 space-y-1">
+                {picks.map((p, i) => (
                   <li key={p.key}>
-                    <span className="font-medium">{p.section}</span> — {p.taskTypeLabel}{" "}
-                    <span className="text-gray-600">({(tasks.find(t => t.id === p.taskId)?.title || "").slice(0, 56) || "Untitled"})</span>
+                    {sequence[i]?.stepTitle || `Step ${i + 1}`} — {p.taskTypeLabel}
                   </li>
                 ))}
               </ol>
             )}
-            {guidedPicks.length > 0 && (
-              <button
-                type="button"
-                onClick={removeLastPick}
-                className="mt-3 text-sm text-indigo-800 font-medium hover:underline"
-              >
-                Undo last task
+            {picks.length > 0 && (
+              <button type="button" onClick={undoLastPick} className="mt-2 text-sm text-indigo-800 font-medium hover:underline">
+                Undo last
               </button>
             )}
           </div>
 
-          {/* Current step — one dropdown */}
-          <div className="rounded-lg border-2 border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
-            <p className="text-sm font-bold text-gray-900">Current step</p>
-
-            {guidedKind === "custom" ? (
-              <>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-800 mb-1">1. Task type (exact match in your library)</label>
-                  <select
-                    value={customTaskType}
-                    onChange={e => {
-                      setCustomTaskType(e.target.value);
-                      setGuidedPendingTaskId("");
-                    }}
-                    className={SELECT_DARK}
-                  >
-                    <option value="">Select task type…</option>
-                    {uniqueTypes.map(ty => (
-                      <option key={ty} value={ty}>
-                        {ty}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-800 mb-1">2. Task for this type only</label>
-                  <select
-                    value={guidedPendingTaskId}
-                    onChange={e => setGuidedPendingTaskId(e.target.value)}
-                    disabled={!customTaskType}
-                    className={SELECT_DARK + " disabled:opacity-50"}
-                  >
-                    <option value="">Select task…</option>
-                    {choicesForCurrentStep.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {(t.title || "Untitled").slice(0, 72)}
-                      </option>
-                    ))}
-                  </select>
-                  {customTaskType && choicesForCurrentStep.length === 0 && (
-                    <p className="text-xs text-amber-800 mt-1 font-medium">
-                      No admin tasks with this exact task_type. Generate one in Tasks first.
-                    </p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  disabled={!guidedPendingTaskId}
-                  onClick={addCustomPick}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-sm disabled:opacity-50"
-                >
-                  Add this task to the mock
-                </button>
-              </>
-            ) : currentSlot ? (
-              <>
-                <p className="text-sm text-gray-900 font-medium">{currentSlot.stepTitle}</p>
-                <p className="text-xs text-gray-700">
-                  Only tasks that match this part are listed ({choicesForCurrentStep.length} available).
+          {currentSlot ? (
+            <div className="rounded-lg border-2 border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
+              <p className="text-sm font-bold text-gray-900">{currentSlot.stepTitle}</p>
+              <p className="text-xs text-gray-700">
+                {isSpeakingPair34Slot(currentSlot)
+                  ? "Select Speaking Task 3 only — the matching Task 4 is added automatically."
+                  : `${choicesForStep.length} available in library (tasks already used in another mock are hidden).`}
+              </p>
+              <select value={pendingTaskId} onChange={e => setPendingTaskId(e.target.value)} className={SELECT_DARK}>
+                <option value="">Select task…</option>
+                {choicesForStep.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {(t.title || "Untitled").slice(0, 80)}
+                  </option>
+                ))}
+              </select>
+              {choicesForStep.length === 0 && (
+                <p className="text-xs text-amber-800 font-medium">
+                  {isSpeakingPair34Slot(currentSlot)
+                    ? "No Speaking Task 3 with a paired Task 4 is available. Use Tasks → Generate Task 3+4 pair, or free a pair from another mock."
+                    : "No free task for this slot. Generate one in Tasks or remove it from another mock."}
                 </p>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-800 mb-1">Select one task</label>
-                  <select
-                    value={guidedPendingTaskId}
-                    onChange={e => setGuidedPendingTaskId(e.target.value)}
-                    className={SELECT_DARK}
-                  >
-                    <option value="">Choose task…</option>
-                    {choicesForCurrentStep.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {(t.title || "Untitled").slice(0, 80)}
-                      </option>
-                    ))}
-                  </select>
-                  {choicesForCurrentStep.length === 0 && (
-                    <p className="text-xs text-amber-800 mt-1 font-medium">
-                      No task in the library for this slot yet. Create a matching task in Tasks, then refresh this page.
-                    </p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  disabled={!guidedPendingTaskId}
-                  onClick={addSequencedPick}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-sm disabled:opacity-50"
-                >
-                  Add and go to next step
-                </button>
-              </>
-            ) : (
-              <p className="text-sm font-medium text-green-800">All steps complete. Review the list above, then create the record.</p>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-3 pt-2 border-t border-gray-100">
-            <button
-              type="button"
-              disabled={creating || !sequenceComplete}
-              onClick={() => void createGuidedMockTest()}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2 rounded-lg transition disabled:opacity-50"
-            >
-              {creating ? "Saving…" : "Create mock test record"}
-            </button>
-            <button
-              type="button"
-              onClick={clearGuidedWizard}
-              className="text-gray-800 text-sm px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 font-medium"
-            >
-              Clear all picks
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showCreateForm && (
-        <div className="bg-white rounded-xl shadow p-6 mb-6">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">Create mock test (manual)</h2>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-              <input
-                type="text"
-                value={newTitle}
-                onChange={e => setNewTitle(e.target.value)}
-                placeholder="e.g. CELPIP Full Mock Test 1"
-                className={SELECT_DARK}
-              />
+              )}
+              <button
+                type="button"
+                disabled={!pendingTaskId}
+                onClick={addPick}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+              >
+                Add and continue
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Time Limit (minutes)</label>
-              <input
-                type="number"
-                value={newTimeLimit}
-                onChange={e => setNewTimeLimit(Number(e.target.value))}
-                className={SELECT_DARK}
-              />
-            </div>
-          </div>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea
-              value={newDescription}
-              onChange={e => setNewDescription(e.target.value)}
-              placeholder="Brief description of this mock test..."
-              className={`${SELECT_DARK} h-24 resize-none`}
-            />
-          </div>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => void createMockTest()}
-              disabled={creating}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition disabled:opacity-50"
-            >
-              {creating ? "Creating..." : "Create Test"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCreateForm(false)}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-6 py-2 rounded-lg transition"
-            >
-              Cancel
-            </button>
-          </div>
+          ) : (
+            <p className="text-sm font-medium text-green-800">All steps selected. Click Create mock test.</p>
+          )}
+
+          <button
+            type="button"
+            disabled={creating || !title.trim() || !sequenceComplete}
+            onClick={() => void createMockTest()}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2 rounded-lg disabled:opacity-50"
+          >
+            {creating ? "Saving…" : "Create mock test"}
+          </button>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-6">
         <div>
-          <h2 className="text-lg font-bold text-gray-700 mb-4">All Mock Tests ({mockTests.length})</h2>
-          <div className="space-y-3">
-            {loading ? (
-              <p className="text-gray-400">Loading...</p>
-            ) : mockTests.length === 0 ? (
-              <div className="bg-white rounded-xl shadow p-6 text-center text-gray-400">
-                <p className="text-4xl mb-2">📋</p>
-                <p>No mock tests yet.</p>
-                <p className="text-sm mt-1">Use Guided mock test or Manual create.</p>
-              </div>
-            ) : (
-              mockTests.map(test => (
+          <h2 className="text-lg font-bold text-gray-700 mb-4">All mock tests ({mockTests.length})</h2>
+          {loading ? (
+            <p className="text-gray-600">Loading…</p>
+          ) : mockTests.length === 0 ? (
+            <div className="bg-white rounded-xl shadow p-6 text-center text-gray-600">
+              <p>No mock tests yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {mockTests.map(test => (
                 <div
                   key={test.id}
                   role="button"
@@ -801,26 +561,29 @@ export default function MockTestsPage() {
                   onKeyDown={e => {
                     if (e.key === "Enter" || e.key === " ") openTest(test);
                   }}
-                  className={`bg-white rounded-xl shadow p-4 cursor-pointer transition ${
-                    selectedTest?.id === test.id
-                      ? "border-2 border-blue-500"
-                      : "border-2 border-transparent hover:border-gray-200"
-                  }`}
                   onClick={() => openTest(test)}
+                  className={`bg-white rounded-xl shadow p-4 cursor-pointer transition ${
+                    selectedTest?.id === test.id ? "border-2 border-blue-500" : "border-2 border-transparent hover:border-gray-200"
+                  }`}
                 >
-                  <div className="flex justify-between items-start mb-2">
+                  <div className="flex justify-between items-start gap-2 mb-2">
                     <h3 className="font-bold text-gray-800">{test.title}</h3>
                     <span
-                      className={`text-xs font-bold px-2 py-1 rounded-full ${
+                      className={`text-xs font-bold px-2 py-1 rounded-full shrink-0 ${
                         test.is_published ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
                       }`}
                     >
                       {test.is_published ? "Published" : "Draft"}
                     </span>
                   </div>
-                  {test.description && <p className="text-sm text-gray-500 mb-3">{test.description}</p>}
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-400">{test.time_limit_minutes} min</span>
+                  {test.test_type && (
+                    <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">
+                      {test.test_type}
+                    </span>
+                  )}
+                  {test.description && <p className="text-sm text-gray-600 mt-2">{test.description}</p>}
+                  <div className="flex justify-between items-center mt-3">
+                    <span className="text-xs text-gray-600">{test.time_limit_minutes} min</span>
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -828,11 +591,7 @@ export default function MockTestsPage() {
                           e.stopPropagation();
                           void togglePublish(test);
                         }}
-                        className={`text-xs px-2 py-1 rounded-lg transition ${
-                          test.is_published
-                            ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
-                            : "bg-green-100 text-green-700 hover:bg-green-200"
-                        }`}
+                        className="text-xs px-2 py-1 rounded-lg bg-green-100 text-green-700 hover:bg-green-200"
                       >
                         {test.is_published ? "Unpublish" : "Publish"}
                       </button>
@@ -842,115 +601,136 @@ export default function MockTestsPage() {
                           e.stopPropagation();
                           void deleteTest(test.id);
                         }}
-                        className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-lg hover:bg-red-200 transition"
+                        className="text-xs px-2 py-1 rounded-lg bg-red-100 text-red-700 hover:bg-red-200"
                       >
                         Delete
                       </button>
                     </div>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div>
           {selectedTest ? (
             <div>
-              <h2 className="text-lg font-bold text-gray-700 mb-4">Tasks in: {selectedTest.title}</h2>
-
-              <div className="bg-white rounded-xl shadow p-4 mb-4">
-                <h3 className="font-semibold text-gray-700 mb-3">Add Task</h3>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1 font-medium">Section</label>
-                    <select
-                      value={selectedSection}
-                      onChange={e => setSelectedSection(e.target.value)}
-                      className={SELECT_DARK}
-                    >
-                      <option value="Writing">Writing</option>
-                      <option value="Reading">Reading</option>
-                      <option value="Speaking">Speaking</option>
-                      <option value="Listening">Listening</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1 font-medium">Task</label>
-                    <select
-                      value={selectedTaskId}
-                      onChange={e => setSelectedTaskId(e.target.value)}
-                      className={SELECT_DARK}
-                    >
-                      <option value="">Select a task...</option>
-                      {tasks
-                        .filter(t => t.task_type.includes(selectedSection))
-                        .map(t => (
-                          <option key={t.id} value={t.id}>
-                            {t.task_type} — {(t.title || "").slice(0, 40) || "No title"}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void addTaskToTest()}
-                  disabled={!selectedTaskId}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition disabled:opacity-50 text-sm"
-                >
-                  Add Task to Test
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                {loadingTestTasks ? (
-                  <p className="text-gray-400 text-sm">Loading tasks...</p>
-                ) : testTasks.length === 0 ? (
-                  <div className="bg-white rounded-xl shadow p-4 text-center text-gray-400 text-sm">
-                    No tasks added yet. Add tasks from the panel above.
-                  </div>
-                ) : (
-                  testTasks.map((mt, index) => (
-                    <div key={mt.id} className="bg-white rounded-xl shadow p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="text-gray-500 font-bold text-sm w-6">{index + 1}</span>
-                        <div>
-                          <p className="font-medium text-gray-900 text-sm">{mt.admin_tasks?.task_type}</p>
-                          <p className="text-xs text-gray-600">{(mt.admin_tasks?.title || "").slice(0, 50) || "No title"}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-xs font-bold px-2 py-1 rounded-full ${
-                            mt.section === "Writing"
-                              ? "bg-blue-100 text-blue-700"
-                              : mt.section === "Reading"
-                                ? "bg-green-100 text-green-700"
-                                : mt.section === "Speaking"
-                                  ? "bg-purple-100 text-purple-700"
-                                  : "bg-orange-100 text-orange-700"
-                          }`}
-                        >
-                          {mt.section}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => void removeTaskFromTest(mt.id)}
-                          className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-lg hover:bg-red-200 transition"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ))
+              <div className="flex justify-between items-center mb-4 gap-2">
+                <h2 className="text-lg font-bold text-gray-700">{editing ? "Edit mock test" : `Tasks: ${selectedTest.title}`}</h2>
+                {!editing && selectedTest.test_type && (
+                  <button
+                    type="button"
+                    onClick={startEditing}
+                    className="text-sm font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg shrink-0"
+                  >
+                    Edit details & tasks
+                  </button>
                 )}
               </div>
+
+              {editing && editSkill ? (
+                <div className="bg-white rounded-xl shadow p-5 space-y-4 border border-indigo-100">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Title</label>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={e => setEditTitle(e.target.value)}
+                      className={SELECT_DARK}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                    <textarea
+                      value={editDescription}
+                      onChange={e => setEditDescription(e.target.value)}
+                      className={`${SELECT_DARK} h-16 resize-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Time limit (minutes)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={editTimeLimit}
+                      onChange={e => setEditTimeLimit(Number(e.target.value) || 60)}
+                      className={SELECT_DARK}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-600">
+                    Skill: <strong>{editSkill}</strong> (cannot change). Replace tasks per part below.
+                  </p>
+                  <div className="space-y-3">
+                    {editSequence.map((slot, index) => {
+                      const options = tasksSelectableForEditSlot(index);
+                      return (
+                        <div key={slot.stepTitle} className="rounded-lg border border-gray-200 p-3 bg-gray-50">
+                          <p className="text-xs font-semibold text-gray-800 mb-2">
+                            {index + 1}. {slot.stepTitle}
+                          </p>
+                          <select
+                            value={editTaskIds[index] || ""}
+                            onChange={e => setEditSlotTask(index, e.target.value)}
+                            className={SELECT_DARK}
+                          >
+                            <option value="">Select task…</option>
+                            {options.map(t => (
+                              <option key={t.id} value={t.id}>
+                                {(t.title || "Untitled").slice(0, 72)}
+                              </option>
+                            ))}
+                          </select>
+                          {options.length === 0 && (
+                            <p className="text-xs text-amber-800 mt-1">
+                              {isSpeakingPair34Slot(slot)
+                                ? "No Task 3 with a paired Task 4 available. Generate a 3+4 pair in Tasks first."
+                                : "No available task for this slot."}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      disabled={savingEdit || !editTitle.trim() || !editTasksComplete}
+                      onClick={() => void saveEdit()}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+                    >
+                      {savingEdit ? "Saving…" : "Save changes"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEditing}
+                      className="text-gray-700 font-medium px-4 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : loadingTestTasks ? (
+                <p className="text-gray-600 text-sm">Loading…</p>
+              ) : testTasks.length === 0 ? (
+                <p className="text-sm text-gray-600">No tasks linked.</p>
+              ) : (
+                <div className="space-y-2">
+                  {testTasks.map((mt, index) => (
+                    <div key={mt.id} className="bg-white rounded-xl shadow p-4 flex items-center gap-3">
+                      <span className="text-gray-600 font-bold text-sm w-6">{index + 1}</span>
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{mt.admin_tasks?.task_type}</p>
+                        <p className="text-xs text-gray-600">{mt.admin_tasks?.title || "Untitled"}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
-            <div className="bg-white rounded-xl shadow p-8 text-center text-gray-400">
-              <p className="text-4xl mb-3">👈</p>
-              <p>Select a mock test to manage its tasks</p>
+            <div className="bg-white rounded-xl shadow p-8 text-center text-gray-600">
+              <p>Select a mock test to view its tasks</p>
             </div>
           )}
         </div>

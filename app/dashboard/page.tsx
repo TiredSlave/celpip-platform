@@ -70,7 +70,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-500">Loading your dashboard...</p>
+        <p className="text-gray-600">Loading your dashboard...</p>
       </main>
     );
   }
@@ -97,9 +97,9 @@ export default function DashboardPage() {
     if (active && payload && payload.length) {
       return (
         <div className="bg-white border border-gray-200 rounded-lg shadow p-3 text-sm">
-          <p className="text-gray-500 mb-1">{label}</p>
+          <p className="text-gray-600 mb-1">{label}</p>
           <p className="font-bold text-blue-600">Band: {payload[0].value}</p>
-          <p className="text-gray-500">{payload[0].payload.task}</p>
+          <p className="text-gray-600">{payload[0].payload.task}</p>
         </div>
       );
     }
@@ -111,13 +111,13 @@ export default function DashboardPage() {
       <div className="bg-white rounded-xl shadow p-5">
         <h3 className="font-semibold text-gray-700 mb-3">{title}</h3>
         <p className={`text-3xl font-bold ${color}`}>{count}</p>
-        <p className="text-gray-400 text-sm">attempts</p>
+        <p className="text-gray-600 text-sm">attempts</p>
         {avg !== null && (
           <p className="text-sm text-gray-600 mt-2">
             Avg: <span className={`font-bold ${getBandColor(avg)}`}>{avg}</span>
           </p>
         )}
-        {count === 0 && <p className="text-xs text-gray-400 mt-2">No attempts yet</p>}
+        {count === 0 && <p className="text-xs text-gray-600 mt-2">No attempts yet</p>}
       </div>
     );
   }
@@ -132,7 +132,7 @@ export default function DashboardPage() {
         <div className="max-w-5xl mx-auto flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold">My Dashboard</h1>
-            <p className="text-blue-200 text-sm mt-1">{user?.email}</p>
+            <p className="text-blue-100 text-sm mt-1">{user?.email}</p>
           </div>
           <div className="flex gap-3">
             <a href="/profile" className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-medium transition">
@@ -149,24 +149,24 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white rounded-xl shadow p-5 text-center">
-            <p className="text-gray-500 text-sm">Total Attempts</p>
+            <p className="text-gray-600 text-sm">Total Attempts</p>
             <p className="text-4xl font-bold text-blue-600 mt-1">{attempts.length}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-5 text-center">
-            <p className="text-gray-500 text-sm">Latest Band</p>
-            <p className={`text-4xl font-bold mt-1 ${latestBand ? getBandColor(latestBand) : "text-gray-400"}`}>
+            <p className="text-gray-600 text-sm">Latest Band</p>
+            <p className={`text-4xl font-bold mt-1 ${latestBand ? getBandColor(latestBand) : "text-gray-600"}`}>
               {latestBand || "—"}
             </p>
           </div>
           <div className="bg-white rounded-xl shadow p-5 text-center">
-            <p className="text-gray-500 text-sm">Average Band</p>
-            <p className={`text-4xl font-bold mt-1 ${averageBand ? getBandColor(averageBand) : "text-gray-400"}`}>
+            <p className="text-gray-600 text-sm">Average Band</p>
+            <p className={`text-4xl font-bold mt-1 ${averageBand ? getBandColor(averageBand) : "text-gray-600"}`}>
               {averageBand || "—"}
             </p>
           </div>
           <div className="bg-white rounded-xl shadow p-5 text-center">
-            <p className="text-gray-500 text-sm">Best Band</p>
-            <p className={`text-4xl font-bold mt-1 ${bestBand ? getBandColor(bestBand) : "text-gray-400"}`}>
+            <p className="text-gray-600 text-sm">Best Band</p>
+            <p className={`text-4xl font-bold mt-1 ${bestBand ? getBandColor(bestBand) : "text-gray-600"}`}>
               {bestBand || "—"}
             </p>
           </div>
@@ -176,7 +176,7 @@ export default function DashboardPage() {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold text-gray-800">Score Progress</h2>
             <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-500">Target Band:</label>
+              <label className="text-sm text-gray-600">Target Band:</label>
               <select
                 value={targetBand}
                 onChange={e => setTargetBand(Number(e.target.value))}
@@ -190,7 +190,7 @@ export default function DashboardPage() {
           </div>
 
           {attempts.length < 2 ? (
-            <div className="text-center py-12 text-gray-400">
+            <div className="text-center py-12 text-gray-600">
               <p className="text-4xl mb-3">📊</p>
               <p>Complete at least 2 practice sessions to see your progress chart</p>
             </div>
@@ -225,10 +225,10 @@ export default function DashboardPage() {
 
           {attempts.length >= 2 && (
             <div className="flex gap-4 mt-4 justify-center text-sm flex-wrap">
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-600"></div><span className="text-gray-500">Writing</span></div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-600"></div><span className="text-gray-500">Reading</span></div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-purple-600"></div><span className="text-gray-500">Speaking</span></div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-orange-600"></div><span className="text-gray-500">Listening</span></div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-600"></div><span className="text-gray-600">Writing</span></div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-600"></div><span className="text-gray-600">Reading</span></div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-purple-600"></div><span className="text-gray-600">Speaking</span></div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-orange-600"></div><span className="text-gray-600">Listening</span></div>
             </div>
           )}
         </div>
@@ -250,7 +250,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl shadow p-6">
           <h2 className="text-xl font-bold text-gray-800 mb-4">Recent Attempts</h2>
           {attempts.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
+            <div className="text-center py-8 text-gray-600">
               <p className="text-4xl mb-3">📝</p>
               <p>No attempts yet. Start practicing!</p>
             </div>
@@ -260,10 +260,10 @@ export default function DashboardPage() {
                 <div key={attempt.id} className={`flex items-center justify-between rounded-lg p-4 border ${getBandBg(attempt.overall_band)}`}>
                   <div>
                     <p className="font-medium text-gray-700">{attempt.task_type}</p>
-                    <p className="text-sm text-gray-400">{formatFullDate(attempt.created_at)}</p>
+                    <p className="text-sm text-gray-600">{formatFullDate(attempt.created_at)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm text-gray-400">Band Score</p>
+                    <p className="text-sm text-gray-600">Band Score</p>
                     <p className={`text-2xl font-bold ${getBandColor(attempt.overall_band)}`}>{attempt.overall_band}</p>
                   </div>
                 </div>

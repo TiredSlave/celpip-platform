@@ -1,7 +1,13 @@
 "use client";
 import { useEffect, useState, useRef, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { storeResultsReturn, taskReturnHref } from "../../../lib/practice-navigation";
+import { navigatePracticeTask } from "../../../lib/practice-task-nav";
+import { usePracticeTaskSiblings } from "../../../lib/use-practice-task-siblings";
+import { PracticeTaskTypeDropdown } from "../../../components/PracticeTaskTypeDropdown";
+import { finishMockPracticePart, parseMockPracticeParams, remainingMockSeconds } from "../../../lib/mock-test-practice";
+import { formatMockTime } from "../../../lib/mock-test-times";
 import { VocabularySelectableText } from "../../../components/VocabularySelectableText";
 declare global { interface Window { __currentAudio?: HTMLAudioElement; } }
 type Question = {
@@ -20,22 +26,24 @@ type ListeningTask = {
   id: string;
   task_type: string;
   content: {
+    topic?: string;
     title: string;
     listening_type: string;
     part_description: string;
     audio_length: string;
+    answer_time_seconds?: number;
     dialogue: DialogueLine[];
     questions: Question[];
   };
 };
 
 const LISTENING_PARTS = [
-  { key: "Listening - Problem Solving",           label: "Task 1", title: "Problem Solving",          onePerPage: true,  hasSections: true  },
-  { key: "Listening - Daily Life Conversation",   label: "Task 2", title: "Daily Life Conversation",  onePerPage: true,  hasSections: false },
-  { key: "Listening - Listening for Information", label: "Task 3", title: "Listening for Information", onePerPage: true,  hasSections: false },
-  { key: "Listening - News Item",                 label: "Task 4", title: "News Item",                onePerPage: false, hasSections: false },
-  { key: "Listening - Discussion",                label: "Task 5", title: "Discussion",               onePerPage: false, hasSections: false },
-  { key: "Listening - Viewpoints",                label: "Task 6", title: "Viewpoints",               onePerPage: false, hasSections: false },
+  { key: "Listening - Problem Solving",           label: "Task 1", title: "Problem Solving",          onePerPage: true,  hasSections: true,  answerTimeSeconds: 30  },
+  { key: "Listening - Daily Life Conversation",   label: "Task 2", title: "Daily Life Conversation",  onePerPage: true,  hasSections: false, answerTimeSeconds: 30  },
+  { key: "Listening - Listening for Information", label: "Task 3", title: "Listening for Information", onePerPage: true,  hasSections: false, answerTimeSeconds: 30  },
+  { key: "Listening - News Item",                 label: "Task 4", title: "News Item",                onePerPage: false, hasSections: false, answerTimeSeconds: 180 },
+  { key: "Listening - Discussion",                label: "Task 5", title: "Discussion",               onePerPage: false, hasSections: false, answerTimeSeconds: 240 },
+  { key: "Listening - Viewpoints",                label: "Task 6", title: "Viewpoints",               onePerPage: false, hasSections: false, answerTimeSeconds: 270 },
 ];
 
 // ── Global audio manager — single instance prevents overlapping ──────────────
@@ -148,6 +156,7 @@ function AudioPlayer({
   cacheKey: string;
   isQuestion?: boolean;
   compact?: boolean;
+  autoPlay?: boolean;
 }) {
   const [state, setState] = useState<"idle"|"loading"|"playing"|"paused"|"error">("idle");
   const [progress, setProgress] = useState(0);
@@ -242,9 +251,9 @@ function AudioPlayer({
       <div className="relative flex-1 h-1.5 bg-gray-600 rounded-full cursor-pointer" onClick={handleSeek}>
         <div className="h-full bg-white rounded-full" style={{width:`${progress}%`}}/>
       </div>
-      <button onClick={restart} disabled={!hasAudio} className="text-gray-400 hover:text-white disabled:opacity-30 transition">🔁</button>
-      <span className="text-xs text-gray-400 font-mono">{fmt(currentTime)}/{fmt(duration)}</span>
-      <span className="text-xs text-gray-500">{state==="loading"?"Loading...":isPlaying?"Playing":state==="idle"?"▶ Listen":"Paused"}</span>
+      <button onClick={restart} disabled={!hasAudio} className="text-gray-600 hover:text-white disabled:opacity-30 transition">🔁</button>
+      <span className="text-xs text-gray-600 font-mono">{fmt(currentTime)}/{fmt(duration)}</span>
+      <span className="text-xs text-gray-600">{state==="loading"?"Loading...":isPlaying?"Playing":state==="idle"?"▶ Listen":"Paused"}</span>
     </div>
   );
 
@@ -252,7 +261,7 @@ function AudioPlayer({
     <div className="bg-gray-900 rounded-xl p-4">
       <div className="flex items-center gap-2 mb-3">
         <button onClick={skipBack} disabled={!hasAudio}
-          className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-white disabled:opacity-30 transition rounded-full hover:bg-gray-700" title="Back 10s">
+          className="w-9 h-9 flex items-center justify-center text-gray-600 hover:text-white disabled:opacity-30 transition rounded-full hover:bg-gray-700" title="Back 10s">
           <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
         </button>
         <button onClick={togglePlay} disabled={state==="loading"}
@@ -262,18 +271,18 @@ function AudioPlayer({
           : <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 ml-0.5"><path d="M8 5v14l11-7z"/></svg>}
         </button>
         <button onClick={skipForward} disabled={!hasAudio}
-          className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-white disabled:opacity-30 transition rounded-full hover:bg-gray-700" title="Forward 10s">
+          className="w-9 h-9 flex items-center justify-center text-gray-600 hover:text-white disabled:opacity-30 transition rounded-full hover:bg-gray-700" title="Forward 10s">
           <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M18 13c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6v4l5-5-5-5v4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8h-2z"/></svg>
         </button>
         <button onClick={restart}
-          className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-white transition rounded-full hover:bg-gray-700" title="Restart">
+          className="w-9 h-9 flex items-center justify-center text-gray-600 hover:text-white transition rounded-full hover:bg-gray-700" title="Restart">
           <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
         </button>
-        <span className="text-xs text-gray-400 font-mono ml-1 flex-shrink-0">{fmt(currentTime)} / {fmt(duration)}</span>
+        <span className="text-xs text-gray-600 font-mono ml-1 flex-shrink-0">{fmt(currentTime)} / {fmt(duration)}</span>
         <div className="flex-1"/>
         <div className="relative">
           <button onClick={()=>setShowRates(s=>!s)}
-            className="text-xs text-gray-400 hover:text-white font-bold px-2 py-1 rounded hover:bg-gray-700 transition">
+            className="text-xs text-gray-600 hover:text-white font-bold px-2 py-1 rounded hover:bg-gray-700 transition">
             {playbackRate}x
           </button>
           {showRates && (
@@ -288,7 +297,7 @@ function AudioPlayer({
           )}
         </div>
         <button onClick={download} disabled={!hasAudio}
-          className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-white disabled:opacity-30 transition rounded-full hover:bg-gray-700" title="Download MP3">
+          className="w-9 h-9 flex items-center justify-center text-gray-600 hover:text-white disabled:opacity-30 transition rounded-full hover:bg-gray-700" title="Download MP3">
           <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
         </button>
       </div>
@@ -297,7 +306,7 @@ function AudioPlayer({
         <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow opacity-0 group-hover:opacity-100 transition pointer-events-none"
           style={{left:`calc(${progress}% - 6px)`}}/>
       </div>
-      <div className="mt-2 text-xs text-gray-500">
+      <div className="mt-2 text-xs text-gray-600">
         {state==="loading" && "🎵 Generating audio..."}
         {state==="idle" && "Click ▶ to play"}
         {state==="error" && "❌ Failed — check GOOGLE_TTS_API_KEY"}
@@ -311,8 +320,12 @@ function AudioPlayer({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 function ListeningContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const mockParams = parseMockPracticeParams(searchParams);
   const taskId = searchParams.get("taskId");
+  const fromLibrary = Boolean(taskId && !mockParams);
+  const listReturnHref = taskReturnHref(searchParams, "/practice/listening");
 
   const [tasks, setTasks] = useState<ListeningTask[]>([]);
   const [currentPartIndex, setCurrentPartIndex] = useState(0);
@@ -324,8 +337,33 @@ function ListeningContent() {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [showTranscript, setShowTranscript] = useState(false);
   const [userInteracted, setUserInteracted] = useState(false);
+  const [answerTimeLeft, setAnswerTimeLeft] = useState(0);
+  const [mockTimeLeft, setMockTimeLeft] = useState<number | null>(null);
+  const answerTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const mockExpiredRef = useRef(false);
+  const taskSiblings = usePracticeTaskSiblings(
+    "listening",
+    fromLibrary ? taskId : null,
+    currentTask?.task_type,
+  );
 
-  useEffect(() => { loadTasks(); }, []);
+  useEffect(() => { void loadTasks(); }, [taskId]);
+
+  useEffect(() => {
+    if (!mockParams) return;
+    const tick = () => {
+      const left = remainingMockSeconds();
+      if (left === null) return;
+      setMockTimeLeft(left);
+      if (left <= 0 && !mockExpiredRef.current) {
+        mockExpiredRef.current = true;
+        void handleSubmit();
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [mockParams]);
 
   useEffect(() => {
     if (!tasks.length) return;
@@ -349,31 +387,98 @@ function ListeningContent() {
     setCurrentQuestionIndex(0); setAnswers({});
     setShowTranscript(false);
     setUserInteracted(false);
+    setAnswerTimeLeft(0);
+    if (answerTimerRef.current) clearInterval(answerTimerRef.current);
   }
+
+  useEffect(() => {
+    if (!currentTask) return;
+    const seconds = currentTask.content.answer_time_seconds ?? LISTENING_PARTS[currentPartIndex].answerTimeSeconds;
+    setAnswerTimeLeft(screen === "question" ? seconds : 0);
+  }, [currentTask?.id, currentPartIndex, screen, currentSection, currentQuestionIndex]);
+
+  useEffect(() => {
+    if (answerTimerRef.current) clearInterval(answerTimerRef.current);
+    if (!currentTask || answerTimeLeft <= 0) return;
+    if (screen !== "question") return;
+
+    answerTimerRef.current = setInterval(() => {
+      setAnswerTimeLeft(t => {
+        if (t <= 1) {
+          if (answerTimerRef.current) clearInterval(answerTimerRef.current);
+          handleAnswerTimeExpired();
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (answerTimerRef.current) clearInterval(answerTimerRef.current);
+    };
+  }, [currentTask, currentPartIndex, screen, answerTimeLeft]);
 
   async function loadTasks() {
     setLoading(true);
+    if (taskId) {
+      const { data } = await supabase.from("admin_tasks").select("*").eq("id", taskId).single();
+      if (data) setTasks([data as ListeningTask]);
+      setLoading(false);
+      return;
+    }
     const { data } = await supabase.from("admin_tasks").select("*")
       .in("task_type", LISTENING_PARTS.map(p => p.key))
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
     const latest: Record<string, ListeningTask> = {};
-    (data || []).forEach((t: ListeningTask) => { if (!latest[t.task_type]) latest[t.task_type] = t; });
+    (data || []).forEach((t: ListeningTask) => { latest[t.task_type] = t; });
     setTasks(Object.values(latest));
     setLoading(false);
   }
 
   function handleAnswer(qId: number, opt: string) { setAnswers(p => ({ ...p, [qId]: opt })); }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!currentTask) return;
+    if (answerTimerRef.current) clearInterval(answerTimerRef.current);
     const questions = currentTask.content.questions || [];
     let correct = 0;
     questions.forEach(q => { if (answers[q.id] === q.correct_answer) correct++; });
+
+    if (mockParams) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+        return;
+      }
+      const fin = await finishMockPracticePart(
+        mockParams,
+        {
+          taskId: currentTask.id,
+          taskType: currentTask.task_type,
+          answers,
+          score: correct,
+          total: questions.length,
+          questions,
+          completedAt: new Date().toISOString(),
+        },
+        session.access_token,
+      );
+      window.location.href = fin.nextUrl;
+      return;
+    }
+
     sessionStorage.setItem("celpip_result", JSON.stringify({
       taskId: currentTask.id, taskType: currentTask.task_type,
       score: correct, total: questions.length, answers, questions,
     }));
-    window.location.href = "/practice/results";
+    storeResultsReturn(listReturnHref);
+    router.push("/practice/results");
+  }
+
+  function formatCountdown(seconds: number) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
   }
 
   function getCurrentQuestions() {
@@ -397,6 +502,14 @@ function ListeningContent() {
 
   function stopAllAudio() {
     document.querySelectorAll("audio").forEach(a => { a.pause(); a.currentTime = 0; });
+  }
+
+  function handleAnswerTimeExpired() {
+    if (LISTENING_PARTS[currentPartIndex].onePerPage) {
+      handleNextQuestion();
+      return;
+    }
+    handleSubmit();
   }
 
   function handleNextQuestion() {
@@ -435,19 +548,76 @@ function ListeningContent() {
       {/* Header */}
       <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-10 shadow-sm">
         <div>
-          <span className="text-lg font-bold text-indigo-900">Listening — {currentPart.label}</span>
-          <p className="text-sm text-gray-500">{currentPart.title}</p>
+          <PracticeTaskTypeDropdown
+            section="listening"
+            currentLabel={`Listening — ${currentPart.label}`}
+            currentTaskType={currentTask?.task_type}
+          />
+          <p className="text-sm text-gray-600">{currentPart.title}</p>
+          {fromLibrary && taskSiblings.total > 0 && (
+            <p className="text-xs text-gray-500 mt-0.5">
+              Task {taskSiblings.position} of {taskSiblings.total}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => { stopAllAudio(); setCurrentPartIndex(i => Math.max(0, i-1)); }} disabled={currentPartIndex === 0}
-            className="text-sm text-gray-400 hover:text-gray-700 disabled:opacity-30 font-medium">PREV</button>
-          <select value={currentPartIndex} onChange={e => setCurrentPartIndex(Number(e.target.value))}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-            {LISTENING_PARTS.map((p, i) => <option key={p.key} value={i}>{p.label} — {p.title}</option>)}
-          </select>
-          <button onClick={() => { stopAllAudio(); setCurrentPartIndex(i => Math.min(LISTENING_PARTS.length-1, i+1)); }}
-            disabled={currentPartIndex === LISTENING_PARTS.length-1}
-            className="text-sm text-gray-400 hover:text-gray-700 disabled:opacity-30 font-medium">NEXT</button>
+          {mockParams && mockTimeLeft !== null && (
+            <div
+              className={`px-3 py-1 rounded-full border-2 font-mono text-sm font-bold ${
+                mockTimeLeft < 60
+                  ? "border-red-500 text-red-600 bg-red-50"
+                  : "border-orange-500 text-orange-600 bg-orange-50"
+              }`}
+            >
+              🕐 {formatMockTime(mockTimeLeft)}
+            </div>
+          )}
+          {mockParams ? (
+            <button
+              type="button"
+              onClick={() => void handleSubmit()}
+              className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-lg"
+            >
+              Next part →
+            </button>
+          ) : fromLibrary ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  stopAllAudio();
+                  if (taskSiblings.prevId) navigatePracticeTask(router, "listening", taskSiblings.prevId, listReturnHref);
+                }}
+                disabled={!taskSiblings.prevId}
+                className="text-sm text-gray-600 hover:text-gray-700 disabled:opacity-30 font-medium"
+              >
+                PREV
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  stopAllAudio();
+                  if (taskSiblings.nextId) navigatePracticeTask(router, "listening", taskSiblings.nextId, listReturnHref);
+                }}
+                disabled={!taskSiblings.nextId}
+                className="text-sm text-gray-600 hover:text-gray-700 disabled:opacity-30 font-medium"
+              >
+                NEXT
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => { stopAllAudio(); setCurrentPartIndex(i => Math.max(0, i-1)); }} disabled={currentPartIndex === 0}
+                className="text-sm text-gray-600 hover:text-gray-700 disabled:opacity-30 font-medium">PREV</button>
+              <select value={currentPartIndex} onChange={e => setCurrentPartIndex(Number(e.target.value))}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                {LISTENING_PARTS.map((p, i) => <option key={p.key} value={i}>{p.label} — {p.title}</option>)}
+              </select>
+              <button onClick={() => { stopAllAudio(); setCurrentPartIndex(i => Math.min(LISTENING_PARTS.length-1, i+1)); }}
+                disabled={currentPartIndex === LISTENING_PARTS.length-1}
+                className="text-sm text-gray-600 hover:text-gray-700 disabled:opacity-30 font-medium">NEXT</button>
+            </>
+          )}
         </div>
       </div>
 
@@ -456,7 +626,7 @@ function ListeningContent() {
           <div className="text-center bg-white rounded-xl shadow p-10 max-w-md">
             <div className="text-5xl mb-4">📭</div>
             <h2 className="text-xl font-bold text-gray-800 mb-2">No task available</h2>
-            <p className="text-gray-500 text-sm">No <strong>{currentPart.title}</strong> task generated yet.</p>
+            <p className="text-gray-600 text-sm">No <strong>{currentPart.title}</strong> task generated yet.</p>
           </div>
         </div>
 
@@ -500,9 +670,16 @@ function ListeningContent() {
                 <div className="border border-gray-100 rounded-lg p-4 bg-gray-50">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xs font-bold px-2 py-1 rounded-full bg-orange-100 text-orange-700">{currentPart.title}</span>
-                    <span className="text-xs text-gray-400">{currentTask.content.audio_length}</span>
+                    <span className="text-xs text-gray-600">{currentTask.content.audio_length}</span>
                   </div>
-                  <h3 className="font-bold text-gray-900 mb-1">{currentTask.content.title}</h3>
+                  <h3 className="font-bold text-gray-900 mb-1">
+                    {currentTask.content.topic || currentTask.content.title}
+                  </h3>
+                  {currentTask.content.topic &&
+                    currentTask.content.title &&
+                    currentTask.content.topic !== currentTask.content.title && (
+                      <p className="text-sm text-gray-600 mb-1">{currentTask.content.title}</p>
+                    )}
                   <p className="text-sm text-gray-600">{currentTask.content.part_description}</p>
                 </div>
 
@@ -511,7 +688,7 @@ function ListeningContent() {
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <button onClick={() => setShowTranscript(s => !s)}
                       className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition text-sm font-semibold text-gray-700">
-                      <span className="flex items-center gap-2">📄 Transcript <span className="text-xs font-normal text-gray-400">(click to {showTranscript ? "hide" : "show"})</span></span>
+                      <span className="flex items-center gap-2">📄 Transcript <span className="text-xs font-normal text-gray-600">(click to {showTranscript ? "hide" : "show"})</span></span>
                       <span className={`transition-transform duration-200 ${showTranscript ? "rotate-180" : ""}`}>▾</span>
                     </button>
                     {showTranscript && (
@@ -519,9 +696,9 @@ function ListeningContent() {
                         {sectionDialogue.map((line, i) => (
                           <div key={i} className="flex gap-3">
                             <span className="text-xs font-bold text-blue-600 whitespace-nowrap min-w-20 mt-0.5">{line.speaker}:</span>
-                            <p className="text-sm text-gray-700 leading-relaxed flex-1 min-w-0">
+                            <div className="text-sm text-gray-700 leading-relaxed flex-1 min-w-0">
                               <VocabularySelectableText text={line.text} source="listening" taskId={currentTask.id} />
-                            </p>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -531,7 +708,7 @@ function ListeningContent() {
 
                 {currentPart.hasSections && (
                   <div>
-                    <p className="text-xs text-gray-400 mb-2">Section {currentSection} of 3</p>
+                    <p className="text-xs text-gray-600 mb-2">Section {currentSection} of 3</p>
                     <div className="flex gap-2">
                       {[1,2,3].map(s => (
                         <div key={s} className={`flex-1 h-1.5 rounded-full transition-all ${s < currentSection ? "bg-indigo-600" : s === currentSection ? "bg-indigo-300" : "bg-gray-200"}`} />
@@ -563,6 +740,11 @@ function ListeningContent() {
                   Question {currentQuestionIndex + 1} of {currentQuestions.length}
                   {currentPart.hasSections && ` · Section ${currentSection}/3`}
                 </span>
+                <span className={`px-3 py-1.5 rounded-full border-2 text-sm font-mono font-bold ${
+                  answerTimeLeft <= 10 ? "border-red-500 text-red-600 bg-red-50" : "border-indigo-500 text-indigo-700 bg-indigo-50"
+                }`}>
+                  Answer time {formatCountdown(answerTimeLeft)}
+                </span>
                 <button onClick={handleNextQuestion}
                   className="px-5 py-2 border-2 border-gray-800 rounded-lg text-sm font-bold text-gray-800 hover:bg-gray-100 transition">
                   {currentQuestionIndex === currentQuestions.length - 1
@@ -573,7 +755,7 @@ function ListeningContent() {
 
               {currentQuestion && (
                 <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-                  <p className="text-xs text-gray-400">Question {currentQuestionIndex + 1} of {currentTask.content.questions.length}</p>
+                  <p className="text-xs text-gray-600">Question {currentQuestionIndex + 1} of {currentTask.content.questions.length}</p>
 
                   {/* Question audio player — compact */}
                   <AudioPlayer
@@ -592,13 +774,13 @@ function ListeningContent() {
                     {(["A","B","C","D"] as const).map(opt => {
                       const isSelected = answers[currentQuestion.id] === opt;
                       return (
-                        <button key={opt} onClick={() => handleAnswer(currentQuestion.id, opt)}
+                        <button key={`${currentQuestion.id}-${opt}`} onClick={() => handleAnswer(currentQuestion.id, opt)}
                           className={`w-full text-left px-5 py-4 rounded-lg border text-sm transition flex items-center gap-3 ${
                             isSelected ? "border-indigo-500 bg-indigo-50 text-indigo-800"
                             : "border-gray-200 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50"
                           }`}>
                           <span className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs font-bold ${
-                            isSelected ? "border-indigo-500 bg-indigo-500 text-white" : "border-gray-300 text-gray-400"
+                            isSelected ? "border-indigo-500 bg-indigo-500 text-white" : "border-gray-300 text-gray-600"
                           }`}>{isSelected ? opt : ""}</span>
                           {currentQuestion.options[opt]}
                         </button>
@@ -612,67 +794,99 @@ function ListeningContent() {
         </div>
 
       ) : (
-        /* ── ALL ON ONE PAGE (Tasks 4-6) ── */
+        /* ── Passage first, questions after Next (Tasks 4-6) ── */
         <div className="flex-1 max-w-3xl mx-auto w-full px-6 py-8 space-y-6">
-          <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-            <h2 className="text-xl font-bold text-gray-900">Listening Passage</h2>
-            <AudioPlayer
-              key={currentTask.id}
-              lines={currentTask.content.dialogue}
-              listeningType={currentPart.title}
-              cacheKey={currentTask.id}
-            />
-            <div className="border border-gray-100 rounded-lg p-4 bg-gray-50">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-bold px-2 py-1 rounded-full bg-orange-100 text-orange-700">{currentPart.title}</span>
-                <span className="text-xs text-gray-400">{currentTask.content.audio_length}</span>
-              </div>
-              <h3 className="font-bold text-gray-900 mb-1">{currentTask.content.title}</h3>
-              <p className="text-sm text-gray-600">{currentTask.content.part_description}</p>
-            </div>
-            {currentTask.content.dialogue?.length > 0 && (
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <button onClick={() => setShowTranscript(s => !s)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition text-sm font-semibold text-gray-700">
-                  <span className="flex items-center gap-2">📄 Transcript <span className="text-xs font-normal text-gray-400">(click to {showTranscript ? "hide" : "show"})</span></span>
-                  <span className={`transition-transform duration-200 ${showTranscript ? "rotate-180" : ""}`}>▾</span>
+          {screen === "passage" ? (
+            <div className="space-y-5">
+              <div className="flex justify-end">
+                <button onClick={() => { setUserInteracted(true); stopAllAudio(); setScreen("question"); setShowTranscript(false); }}
+                  className="px-5 py-2 border-2 border-gray-800 rounded-lg text-sm font-bold text-gray-800 hover:bg-gray-100 transition">
+                  Next →
                 </button>
-                {showTranscript && (
-                  <div className="px-4 py-4 space-y-3 max-h-72 overflow-y-auto bg-white">
-                    {currentTask.content.dialogue.map((line, i) => (
-                      <div key={i} className="flex gap-3">
-                        <span className="text-xs font-bold text-blue-600 whitespace-nowrap min-w-20 mt-0.5">{line.speaker}:</span>
-                        <p className="text-sm text-gray-700 leading-relaxed flex-1 min-w-0">
-                          <VocabularySelectableText text={line.text} source="listening" taskId={currentTask.id} />
-                        </p>
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+                <h2 className="text-xl font-bold text-gray-900">Listening Passage</h2>
+                <AudioPlayer
+                  key={currentTask.id}
+                  lines={currentTask.content.dialogue}
+                  listeningType={currentPart.title}
+                  cacheKey={currentTask.id}
+                />
+                <div className="border border-gray-100 rounded-lg p-4 bg-gray-50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold px-2 py-1 rounded-full bg-orange-100 text-orange-700">{currentPart.title}</span>
+                    <span className="text-xs text-gray-600">{currentTask.content.audio_length}</span>
+                  </div>
+                  <h3 className="font-bold text-gray-900 mb-1">
+                    {currentTask.content.topic || currentTask.content.title}
+                  </h3>
+                  {currentTask.content.topic &&
+                    currentTask.content.title &&
+                    currentTask.content.topic !== currentTask.content.title && (
+                      <p className="text-sm text-gray-600 mb-1">{currentTask.content.title}</p>
+                    )}
+                  <p className="text-sm text-gray-600">{currentTask.content.part_description}</p>
+                </div>
+                {currentTask.content.dialogue?.length > 0 && (
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <button onClick={() => setShowTranscript(s => !s)}
+                      className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition text-sm font-semibold text-gray-700">
+                      <span className="flex items-center gap-2">📄 Transcript <span className="text-xs font-normal text-gray-600">(click to {showTranscript ? "hide" : "show"})</span></span>
+                      <span className={`transition-transform duration-200 ${showTranscript ? "rotate-180" : ""}`}>▾</span>
+                    </button>
+                    {showTranscript && (
+                      <div className="px-4 py-4 space-y-3 max-h-72 overflow-y-auto bg-white">
+                        {currentTask.content.dialogue.map((line, i) => (
+                          <div key={i} className="flex gap-3">
+                            <span className="text-xs font-bold text-blue-600 whitespace-nowrap min-w-20 mt-0.5">{line.speaker}:</span>
+                            <div className="text-sm text-gray-700 leading-relaxed flex-1 min-w-0">
+                              <VocabularySelectableText text={line.text} source="listening" taskId={currentTask.id} />
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
-
-          <div className="space-y-4">
-            <h3 className="font-bold text-gray-800">Choose the best way to complete each statement:</h3>
-            {currentTask.content.questions?.map((q, i) => (
-              <div key={q.id} className="bg-white border border-gray-200 rounded-xl p-5">
-                <p className="text-sm font-semibold text-gray-800 mb-3">{i + 1}. {q.question}</p>
-                <select value={answers[q.id] || ""} onChange={e => handleAnswer(q.id, e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                  <option value="" disabled>Select an option</option>
-                  {(["A","B","C","D"] as const).map(opt => (
-                    <option key={opt} value={opt}>{opt}. {q.options[opt]}</option>
-                  ))}
-                </select>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between gap-3">
+                <button onClick={() => { stopAllAudio(); setScreen("passage"); }}
+                  className="px-5 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">
+                  ← Previous
+                </button>
+                <span className={`px-3 py-1.5 rounded-full border-2 text-sm font-mono font-bold ${
+                  answerTimeLeft <= 30 ? "border-red-500 text-red-600 bg-red-50" : "border-indigo-500 text-indigo-700 bg-indigo-50"
+                }`}>
+                  Answer time {formatCountdown(answerTimeLeft)}
+                </span>
               </div>
-            ))}
-          </div>
 
-          <button onClick={handleSubmit}
-            className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition">
-            Submit Answers
-          </button>
+              <div className="space-y-4">
+                <h3 className="font-bold text-gray-800">Choose the best way to complete each statement:</h3>
+                {currentTask.content.questions?.map((q, i) => (
+                  <div key={`${q.id}-${i}`} className="bg-white border border-gray-200 rounded-xl p-5">
+                    <p className="text-sm font-semibold text-gray-800 mb-3">{i + 1}. {q.question}</p>
+                    <select value={answers[q.id] || ""} onChange={e => handleAnswer(q.id, e.target.value)}
+                      className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                      <option value="" disabled>Select an option</option>
+                      {(["A","B","C","D"] as const).map(opt => (
+                        <option key={`${q.id}-${opt}`} value={opt}>{opt}. {q.options[opt]}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              <button onClick={handleSubmit}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition">
+                Submit Answers
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

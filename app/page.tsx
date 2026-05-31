@@ -1,560 +1,350 @@
-"use client";
-import { useState } from "react";
-import { supabase } from "./lib/supabase";
+import Link from "next/link";
+import type { Metadata } from "next";
+import { JsonLd } from "./components/JsonLd";
+import { buildPageMetadata, getSiteUrl, SITE_NAME, SITE_TAGLINE } from "./lib/site-seo";
 
-type Task1 = {
-  task_type: string;
-  scenario: string;
-  instructions: string;
-  bullet_points: string[];
-  word_limit: number;
-  time_limit_minutes: number;
-  sample_answer?: string;
-  sample_answer_band?: number;
-  sample_answer_notes?: string[];
+export const metadata: Metadata = buildPageMetadata({
+  title: SITE_NAME,
+  path: "/",
+});
+
+const modules = [
+  {
+    title: "Writing",
+    accent: "blue",
+    href: "/practice/writing",
+    description: "Practice emails and survey responses with timed tasks and AI feedback.",
+    stats: "2 tasks | 53 minutes",
+    points: ["Task 1 email practice", "Task 2 opinion response", "Band-style feedback"],
+  },
+  {
+    title: "Reading",
+    accent: "green",
+    href: "/practice/reading",
+    description: "Work through CELPIP-style reading parts with realistic passages and dropdown items.",
+    stats: "4 parts | 55-60 minutes",
+    points: ["Correspondence", "Apply information", "Information and viewpoints"],
+  },
+  {
+    title: "Listening",
+    accent: "orange",
+    href: "/practice/listening",
+    description: "Listen to generated audio tasks and answer under countdown conditions.",
+    stats: "6 parts | timed answers",
+    points: ["Segmented Task 1 audio", "Question countdowns", "Transcript review"],
+  },
+  {
+    title: "Speaking",
+    accent: "purple",
+    href: "/practice/speaking",
+    description: "Practice all speaking tasks, including picture description and prediction pairs.",
+    stats: "8 tasks | prep timers",
+    points: ["Image-based tasks", "Prediction practice", "AI evaluation"],
+  },
+] as const;
+
+const accentClasses = {
+  blue: {
+    card: "border-blue-100 hover:border-blue-300",
+    badge: "bg-blue-50 text-blue-700",
+    dot: "bg-blue-500",
+  },
+  green: {
+    card: "border-green-100 hover:border-green-300",
+    badge: "bg-green-50 text-green-700",
+    dot: "bg-green-500",
+  },
+  orange: {
+    card: "border-orange-100 hover:border-orange-300",
+    badge: "bg-orange-50 text-orange-700",
+    dot: "bg-orange-500",
+  },
+  purple: {
+    card: "border-purple-100 hover:border-purple-300",
+    badge: "bg-purple-50 text-purple-700",
+    dot: "bg-purple-500",
+  },
 };
 
-type Task2 = {
-  task_type: string;
-  topic: string;
-  context?: string;
-  question: string;
-  opinion_options?: string[];
-  option_a?: string;
-  option_b?: string;
-  word_limit: number;
-  time_limit_minutes: number;
-  sample_answer?: string;
-  sample_answer_band?: number;
-  sample_answer_notes?: string[];
-};
+const features = [
+  "Timed practice that follows CELPIP-style pressure",
+  "Fresh AI-generated tasks for repeated practice",
+  "Reading and listening vocabulary saving",
+  "Templates and strategy pages for repeatable answers",
+  "Admin task library for controlled practice content",
+  "Results review so learners can find weak areas",
+];
 
-type Task = Task1 | Task2;
+const flow = [
+  {
+    step: "1",
+    title: "Choose a skill",
+    text: "Start with Writing, Reading, Listening, or Speaking depending on the learner's weakest area.",
+  },
+  {
+    step: "2",
+    title: "Practice under time",
+    text: "Complete realistic tasks with countdowns, audio flow, and section rules close to the real exam.",
+  },
+  {
+    step: "3",
+    title: "Review and improve",
+    text: "Check answers, save useful vocabulary, and study templates before trying another task.",
+  },
+];
 
-type Feedback = {
-  overall_band: number;
-  subscores: {
-    task_fulfillment: number;
-    coherence: number;
-    vocabulary: number;
-    grammar: number;
-  };
-  strengths: string[];
-  areas_to_improve: string[];
-  detailed_feedback: string;
-  sample_improved_sentence: string;
-};
+const templateLinks = [
+  { title: "Writing Task 1", href: "/templates/writing-task-1", label: "Email structure" },
+  { title: "Writing Task 2", href: "/templates/writing-task-2", label: "Survey response" },
+  { title: "Speaking Task 3", href: "/templates/speaking-task-3", label: "Picture description" },
+  { title: "Speaking Task 4", href: "/templates/speaking-task-4", label: "Make predictions" },
+];
+
+const faqs = [
+  {
+    q: "What is CELPIP Lib?",
+    a: "CELPIP Lib is an online CELPIP practice library for CELPIP-General exam preparation across Writing, Reading, Listening, and Speaking with timed tasks and AI feedback.",
+  },
+  {
+    q: "Which CELPIP skills can I practice here?",
+    a: "You can practice all four CELPIP skills: Writing (2 tasks), Reading (4 parts), Listening (6 parts), and Speaking (8 tasks).",
+  },
+  {
+    q: "Does this platform include CELPIP templates?",
+    a: "Yes. Free Writing and Speaking template guides explain task structure, scoring focus, and common mistakes for each task type.",
+  },
+  {
+    q: "Is CELPIP Lib useful for Canadian immigration English requirements?",
+    a: "Yes. CELPIP Lib helps learners build timed exam skills for CELPIP, which is widely used for Canadian permanent residence, citizenship, and professional licensing.",
+  },
+  {
+    q: "Do I need an account to start practicing?",
+    a: "You can explore templates and practice flows, and creating a free account lets you save results, vocabulary, and mock test progress.",
+  },
+];
 
 export default function Home() {
-  const [activeTask, setActiveTask] = useState("Writing Task 1");
-  const [task, setTask] = useState<Task | null>(null);
-  const [userResponse, setUserResponse] = useState("");
-  const [feedback, setFeedback] = useState<Feedback | null>(null);
-  const [loadingTask, setLoadingTask] = useState(false);
-  const [loadingFeedback, setLoadingFeedback] = useState(false);
-  const [wordCount, setWordCount] = useState(0);
-  const [error, setError] = useState(""); 
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [timerRef, setTimerRef] = useState<NodeJS.Timeout | null>(null);
-
-  async function generateTask() {
-  setLoadingTask(true);
-  setFeedback(null);
-  setUserResponse("");
-  setWordCount(0);
-  stopTimer();
-  try {
-    const res = await fetch("/api/admin/writing/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ taskType: activeTask })
-    });
-    const data = await res.json();
-    setTask(data);
-
-    // Start timer based on task type
-    const minutes = activeTask === "Writing Task 2" ? 26 : 27;
-    startTimer(minutes);
-
-  } catch (err) {
-    console.error(err);
-  }
-  setLoadingTask(false);
-}
-
-  function startTimer(minutes: number) {
-  // Clear any existing timer
-  if (timerRef) clearInterval(timerRef);
-
-  const seconds = minutes * 60;
-  setTimeLeft(seconds);
-  setTimerRunning(true);
-
-  const interval = setInterval(() => {
-    setTimeLeft(prev => {
-      if (prev <= 1) {
-        clearInterval(interval);
-        setTimerRunning(false);
-        return 0;
-      }
-      return prev - 1;
-    });
-  }, 1000);
-
-  setTimerRef(interval);
-}
-
-function stopTimer() {
-  if (timerRef) clearInterval(timerRef);
-  setTimerRunning(false);
-  setTimeLeft(0);
-}
-
-function formatTime(seconds: number) {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-}
-
-  async function submitResponse() {
-  if (!task || !userResponse.trim()) return;
-  setLoadingFeedback(true);
-  setError("");
-
-  try {
-    console.log("Step 1 - Getting user...");
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log("Step 2 - Session:", session?.user?.id || "not logged in");
-
-    const taskPrompt = activeTask === "Writing Task 2"
-      ? (task as Task2).question
-      : (task as Task1).scenario + " " + (task as Task1).instructions;
-
-    console.log("Step 3 - Sending to evaluate API...");
-
-    const res = await fetch("/api/tasks/evaluate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // Send auth token so API can save with user permissions
-        "Authorization": `Bearer ${session?.access_token || ""}`
-      },
-      body: JSON.stringify({
-        taskPrompt,
-        userResponse,
-        taskType: activeTask,
-        userId: session?.user?.id || null
-      })
-    });
-
-    console.log("Step 4 - Response status:", res.status);
-    const data = await res.json();
-    console.log("Step 5 - Response data:", data);
-
-    if (data.error) {
-      setError("Evaluation failed: " + data.error);
-    } else {
-      setFeedback(data);
-    }
-
-  } catch (err) {
-    console.error("Caught error:", err);
-    setError("Something went wrong: " + String(err));
-  }
-
-  setLoadingFeedback(false);
-}
-
-function handleResponseChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-  const text = e.target.value;
-  setUserResponse(text);
-  setWordCount(text.trim() === "" ? 0 : text.trim().split(/\s+/).length);
-  console.log("Response length:", text.length); // add this line
-}
-
-  function getBandColor(band: number) {
-    if (band >= 9) return "text-green-600";
-    if (band >= 7) return "text-blue-600";
-    if (band >= 5) return "text-yellow-600";
-    return "text-red-600";
-  }
-
-  const wordLimit = task?.word_limit || 150;
+  const siteUrl = getSiteUrl();
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-blue-700 text-white py-6 px-6 shadow">
-        <h1 className="text-3xl font-bold">CELPIP Writing Practice</h1>
-        <p className="text-blue-200 mt-1">
-          AI-powered mock tests to help you reach your target score
-        </p>
-      </div>
-
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        {/* Navigation to other modules */}
-        <div className="flex gap-3 mb-6">
-          <a href="/listening" className="px-4 py-2 bg-white border rounded-full text-gray-600 text-sm hover:border-orange-400">
-            🎧 Listening
-          </a>
-          <span className="px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-semibold">
-            ✍️ Writing
-          </span>
-          <a
-            href="/reading"
-            className="px-4 py-2 bg-white border rounded-full text-gray-600 text-sm hover:border-green-400"
-          >
-            📖 Reading
-          </a>
-          <a href="/speaking" className="px-4 py-2 bg-white border rounded-full text-gray-600 text-sm hover:border-purple-400">
-            🎤 Speaking
-          </a>
-        </div>
-        
-        {/* Task Type Selector */}
-        <div className="flex gap-3 mb-6">
-          {["Writing Task 1", "Writing Task 2"].map((type) => (
-            <button
-              key={type}
-              onClick={() => {
-                setActiveTask(type);
-                setTask(null);
-                setFeedback(null);
-                setUserResponse("");
-              }}
-              className={`px-6 py-2 rounded-full font-semibold transition ${
-                activeTask === type
-                  ? "bg-blue-600 text-white shadow"
-                  : "bg-white text-gray-600 border hover:border-blue-400"
-              }`}
-            >
-              {type === "Writing Task 1" ? "✉️ Task 1 — Email" : "📋 Task 2 — Survey"}
-            </button>
-          ))}
-        </div>
-
-        {/* Task Description */}
-        <div className="bg-white rounded-xl p-4 mb-6 border border-gray-200 text-sm text-gray-600">
-          {activeTask === "Writing Task 1"
-            ? "✉️ Write an email responding to a given situation. Address all bullet points provided. (150 words, 27 minutes)"
-            : "📋 Read a survey question and write a structured response expressing and defending your opinion. (200 words, 26 minutes)"
-          }
-        </div>
-
-        {/* Generate Button */}
-        <button
-          onClick={generateTask}
-          disabled={loadingTask}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold
-                     py-4 px-6 rounded-xl shadow transition mb-8 text-lg"
-        >
-          {loadingTask
-            ? "⏳ Generating Task..."
-            : `🎯 Generate New ${activeTask}`}
-        </button>
-
-        {/* Task 1 Display */}
-        {task && activeTask === "Writing Task 1" && (
-          <div className="bg-white rounded-xl shadow p-6 mb-6 border-l-4 border-blue-600">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-blue-700">
-                {(task as Task1).task_type}
-              </h2>
-              <div className="flex gap-4 text-sm text-gray-500">
-                <span>⏱ {task.time_limit_minutes} min</span>
-                <span>📝 {task.word_limit} words</span>
-              </div>
+    <>
+      <JsonLd
+        data={[
+          {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            name: SITE_NAME,
+            url: siteUrl,
+            description: SITE_TAGLINE,
+            inLanguage: "en-CA",
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "EducationalOrganization",
+            name: SITE_NAME,
+            url: siteUrl,
+            description: "AI-powered CELPIP test preparation for Writing, Reading, Listening, and Speaking.",
+            areaServed: "CA",
+            knowsAbout: [
+              "CELPIP",
+              "Canadian English language test",
+              "English exam preparation",
+              "Immigration English test",
+            ],
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: faqs.map(item => ({
+              "@type": "Question",
+              name: item.q,
+              acceptedAnswer: { "@type": "Answer", text: item.a },
+            })),
+          },
+        ]}
+      />
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      <section className="relative overflow-hidden bg-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_36%),radial-gradient(circle_at_top_right,#dcfce7,transparent_30%)]" />
+        <div className="relative mx-auto max-w-7xl px-6 py-20 lg:flex lg:items-center lg:gap-14 lg:py-24">
+          <div className="max-w-3xl">
+            <div className="mb-5 inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700">
+              {SITE_NAME} — all four skills
             </div>
-            <div className="bg-blue-50 rounded-lg p-4 mb-4">
-              <p className="font-semibold text-gray-700 mb-1">Scenario:</p>
-              <p className="text-gray-700">{(task as Task1).scenario}</p>
-            </div>
-            <div className="mb-4">
-              <p className="font-semibold text-gray-700 mb-1">Instructions:</p>
-              <p className="text-gray-700">{(task as Task1).instructions}</p>
-            </div>
-            <div>
-              <p className="font-semibold text-gray-700 mb-2">
-                Address these points:
-              </p>
-              <ul className="space-y-1">
-                {(task as Task1).bullet_points.map((point, i) => (
-                  <li key={i} className="flex items-start gap-2 text-gray-700">
-                    <span className="text-blue-600 font-bold">•</span>
-                    {point}
-                  </li>
-                ))}
-              </ul>
+            <h1 className="text-4xl font-black tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
+              Practice CELPIP with timed, AI-generated tasks.
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
+              Build exam confidence with realistic Writing, Reading, Listening, and Speaking practice in one focused platform.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/practice"
+                className="rounded-xl bg-blue-600 px-6 py-3 text-center text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700"
+              >
+                Start Practice
+              </Link>
+              <Link
+                href="/templates"
+                className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-center text-sm font-bold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50"
+              >
+                View Templates
+              </Link>
             </div>
           </div>
-        )}
 
-        {/* Task 2 Display */}
-        {task && activeTask === "Writing Task 2" && (() => {
-          const t2 = task as Task2;
-          const options =
-            t2.option_a != null && t2.option_b != null
-              ? [t2.option_a, t2.option_b]
-              : (t2.opinion_options || []);
-          return (
-          <div className="bg-white rounded-xl shadow p-6 mb-6 border-l-4 border-purple-600">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-purple-700">
-                {t2.task_type}
-              </h2>
-              <div className="flex gap-4 text-sm text-gray-500">
-                <span>⏱ {task.time_limit_minutes} min</span>
-                <span>📝 {task.word_limit} words</span>
-              </div>
-            </div>
-            <div className="bg-purple-50 rounded-lg p-4 mb-4">
-              <p className="font-semibold text-gray-700 mb-1">Topic:</p>
-              <p className="text-gray-700">{t2.topic}</p>
-            </div>
-            {t2.context && (
-              <div className="mb-4">
-                <p className="font-semibold text-gray-700 mb-1">Background:</p>
-                <p className="text-gray-700 text-sm leading-relaxed">{t2.context}</p>
-              </div>
-            )}
-            <div className="mb-4">
-              <p className="font-semibold text-gray-700 mb-2">Question:</p>
-              <p className="text-gray-800 text-lg font-medium">
-                {t2.question}
-              </p>
-            </div>
-            <div>
-              <p className="font-semibold text-gray-700 mb-2">
-                Choose one option to support:
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                {options.map((option, i) => (
-                  <div
-                    key={i}
-                    className="bg-purple-50 border border-purple-200
-                               rounded-lg p-3 text-gray-700 text-sm"
-                  >
-                    <span className="font-bold text-purple-600 mr-2">
-                      Option {String.fromCharCode(65 + i)}:
+          <div className="mt-12 grid flex-1 gap-4 sm:grid-cols-2 lg:mt-0">
+            {modules.map((module) => {
+              const colors = accentClasses[module.accent];
+              return (
+                <Link
+                  key={module.title}
+                  href={module.href}
+                  className={`rounded-3xl border bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl ${colors.card}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-lg font-black">{module.title}</h2>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${colors.badge}`}>
+                      {module.stats}
                     </span>
-                    {option}
                   </div>
-                ))}
-              </div>
-            </div>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">{module.description}</p>
+                  <div className="mt-5 space-y-2">
+                    {module.points.map((point) => (
+                      <div key={point} className="flex items-center gap-2 text-sm text-slate-700">
+                        <span className={`h-2 w-2 rounded-full ${colors.dot}`} />
+                        {point}
+                      </div>
+                    ))}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
-          );
-        })()}
+        </div>
+      </section>
 
-        {/* Response Area */}
-        {/* Response Area */}
-        {task && (
-          <div className="bg-white rounded-xl shadow p-6 mb-6">
-            {error && (
-              <div className="bg-red-50 text-red-600 rounded-lg p-4 mb-4 text-sm">
-                ❌ {error}
-              </div>
-            )}
-            {/* Timer */}
-    {timeLeft > 0 && (
-      <div className={`flex items-center justify-between rounded-lg p-4 mb-4 ${
-        timeLeft < 300
-          ? "bg-red-50 border border-red-200"
-          : "bg-blue-50 border border-blue-200"
-      }`}>
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">⏱</span>
+      <section className="mx-auto max-w-7xl px-6 py-16">
+        <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-start">
           <div>
-            <p className="text-sm text-gray-500">Time Remaining</p>
-            <p className={`text-3xl font-bold font-mono ${
-              timeLeft < 300 ? "text-red-600" : "text-blue-600"
-            }`}>
-              {formatTime(timeLeft)}
+            <p className="text-sm font-bold uppercase tracking-wide text-blue-600">Why use this platform</p>
+            <h2 className="mt-3 text-3xl font-black text-slate-950">Practice that feels closer to the real test.</h2>
+            <p className="mt-4 text-slate-600 leading-7">
+              The homepage should help learners quickly choose what to practice, then move into a task without confusion.
+              This platform is strongest when it combines timing, realistic task formats, and review tools.
             </p>
           </div>
-        </div>
-        {timeLeft < 300 && (
-          <p className="text-red-500 text-sm font-medium animate-pulse">
-            ⚠️ Less than 5 minutes left!
-          </p>
-        )}
-      </div>
-    )}
-
-    {/* Time is up message */}
-    {timeLeft === 0 && timerRunning === false && task && !feedback && (
-      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
-        <p className="text-orange-600 font-semibold">
-          ⏰ Time is up! Please submit your response.
-        </p>
-      </div>
-    )}
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-lg font-semibold text-gray-700">
-                Your Response
-              </h3>
-              <span className={`text-sm font-medium ${
-                wordCount > wordLimit ? "text-red-500" : "text-gray-500"
-              }`}>
-                {wordCount} / {wordLimit} words
-              </span>
-            </div>
-            <textarea
-              value={userResponse}
-              onChange={handleResponseChange}
-              placeholder={
-                activeTask === "Writing Task 1"
-                  ? "Write your email response here..."
-                  : "Write your survey response here. State your opinion clearly and support it with reasons and examples..."
-              }
-              className="w-full h-56 p-4 border border-gray-200 rounded-lg
-                         focus:outline-none focus:ring-2 focus:ring-blue-400
-                         resize-none text-gray-700"
-            />
-            <button
-              onClick={submitResponse}
-              disabled={loadingFeedback || !userResponse.trim()}
-              className="mt-4 w-full bg-green-600 hover:bg-green-700 text-white
-                         font-semibold py-3 px-6 rounded-xl shadow transition
-                         disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loadingFeedback
-                ? "⏳ Evaluating..."
-                : "✅ Submit for AI Feedback"}
-            </button>
-          </div>
-        )}
-
-        {/* Feedback Display */}
-        {feedback && (
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-6">
-              📊 Your Results
-            </h3>
-
-            {/* Overall Band */}
-            <div className="text-center bg-gray-50 rounded-xl p-6 mb-6">
-              <p className="text-gray-500 mb-1">Overall Band Score</p>
-              <p className={`text-7xl font-bold ${
-                getBandColor(feedback.overall_band)
-              }`}>
-                {feedback.overall_band}
-              </p>
-              <p className="text-gray-400 text-sm mt-1">out of 12</p>
-            </div>
-
-            {/* Subscores */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              {Object.entries(feedback.subscores).map(([key, value]) => (
-                <div key={key} className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500 capitalize mb-1">
-                    {key.replace(/_/g, " ")}
-                  </p>
-                  <p className={`text-2xl font-bold ${
-                    getBandColor(value as number)
-                  }`}>
-                    {value as number}
-                    <span className="text-gray-400 text-sm font-normal">
-                      {" "}/ 12
-                    </span>
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            {/* Strengths */}
-            <div className="mb-4">
-              <h4 className="font-semibold text-green-700 mb-2">
-                ✅ Strengths
-              </h4>
-              <ul className="space-y-2">
-                {feedback.strengths.map((s, i) => (
-                  <li key={i}
-                    className="bg-green-50 text-green-800 rounded-lg p-3 text-sm">
-                    {s}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Areas to Improve */}
-            <div className="mb-4">
-              <h4 className="font-semibold text-orange-700 mb-2">
-                📈 Areas to Improve
-              </h4>
-              <ul className="space-y-2">
-                {feedback.areas_to_improve.map((s, i) => (
-                  <li key={i}
-                    className="bg-orange-50 text-orange-800 rounded-lg p-3 text-sm">
-                    {s}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Detailed Feedback */}
-            <div className="mb-4">
-              <h4 className="font-semibold text-gray-700 mb-2">
-                💬 Detailed Feedback
-              </h4>
-              <p className="bg-gray-50 rounded-lg p-4 text-gray-700 text-sm leading-relaxed">
-                {feedback.detailed_feedback}
-              </p>
-            </div>
-
-            {/* Sample Improved Sentence */}
-            <div>
-              <h4 className="font-semibold text-blue-700 mb-2">
-                ✨ Sample Improved Sentence
-              </h4>
-              <p className="bg-blue-50 rounded-lg p-4 text-blue-800 text-sm italic leading-relaxed">
-                {feedback.sample_improved_sentence}
-              </p>
-            </div>
-
-            {/* Try Again */}
-            <button
-              onClick={generateTask}
-              className="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl shadow transition"
-            >
-              🔄 Try Another Task
-            </button>
-
-            {/* Sample Answer */}
-            {task && (task as Task1).sample_answer && (
-              <div className="bg-white rounded-xl shadow p-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <h4 className="font-bold text-green-700">Model Answer</h4>
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">
-                    Band {(task as Task1).sample_answer_band}
-                  </span>
-                </div>
-                <div className="bg-green-50 rounded-lg p-4 mb-3">
-                  <p className="text-gray-700 text-sm whitespace-pre-wrap">
-                    {(task as Task1).sample_answer}
-                  </p>
-                </div>
-                {(task as Task1).sample_answer_notes && (
-                  <div>
-                    <p className="font-semibold text-gray-700 text-sm mb-2">
-                      What makes this a high band answer:
-                    </p>
-                    <ul className="space-y-1">
-                      {(task as Task1).sample_answer_notes!.map((note: string, idx: number) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
-                          <span className="text-green-500">✓</span>
-                          {note}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {features.map((feature) => (
+              <div key={feature} className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-700 shadow-sm">
+                {feature}
               </div>
-            )}
+            ))}
           </div>
-        )}
-      </div>
+        </div>
+      </section>
+
+      <section className="bg-white py-16">
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-wide text-green-600">Practice flow</p>
+              <h2 className="mt-3 text-3xl font-black text-slate-950">A simple loop for improvement.</h2>
+            </div>
+            <Link href="/practice" className="text-sm font-bold text-blue-600 hover:underline">
+              Open practice dashboard
+            </Link>
+          </div>
+          <div className="grid gap-5 md:grid-cols-3">
+            {flow.map((item) => (
+              <div key={item.step} className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-sm font-black text-white">
+                  {item.step}
+                </div>
+                <h3 className="mt-5 text-lg font-black text-slate-950">{item.title}</h3>
+                <p className="mt-3 text-sm leading-6 text-slate-600">{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-6 py-16">
+        <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div className="rounded-3xl bg-slate-950 p-8 text-white shadow-xl">
+            <p className="text-sm font-bold uppercase tracking-wide text-blue-200">Study before practice</p>
+            <h2 className="mt-3 text-3xl font-black">Use templates to make your answers easier to organize.</h2>
+            <p className="mt-4 text-sm leading-7 text-slate-300">
+              Templates give learners a repeatable structure, so timed practice becomes less stressful and more consistent.
+            </p>
+            <Link
+              href="/templates"
+              className="mt-6 inline-flex rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-blue-50"
+            >
+              Browse all templates
+            </Link>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {templateLinks.map((template) => (
+              <Link
+                key={template.title}
+                href={template.href}
+                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg"
+              >
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{template.label}</p>
+                <h3 className="mt-2 text-lg font-black text-slate-950">{template.title}</h3>
+                <p className="mt-3 text-sm text-blue-600 font-bold">Open guide</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-slate-100 py-16" id="faq">
+        <div className="mx-auto max-w-7xl px-6">
+          <p className="text-sm font-bold uppercase tracking-wide text-indigo-600">FAQ</p>
+          <h2 className="mt-3 text-3xl font-black text-slate-950">Common questions about CELPIP practice</h2>
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            {faqs.map(item => (
+              <article key={item.q} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="text-base font-black text-slate-950">{item.q}</h3>
+                <p className="mt-3 text-sm leading-7 text-slate-600">{item.a}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-slate-200 bg-white">
+        <div className="mx-auto max-w-7xl px-6 py-14">
+          <div className="rounded-3xl bg-gradient-to-r from-blue-600 to-indigo-600 p-8 text-white shadow-xl sm:p-10">
+            <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+              <div>
+                <h2 className="text-3xl font-black">Ready to practice under exam timing?</h2>
+                <p className="mt-3 max-w-2xl text-blue-100">
+                  Start with one skill today, review your result, then repeat with a fresh task.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Link
+                  href="/practice"
+                  className="rounded-xl bg-white px-6 py-3 text-center text-sm font-bold text-blue-700 transition hover:bg-blue-50"
+                >
+                  Start Practice
+                </Link>
+                <Link
+                  href="/signup"
+                  className="rounded-xl border border-white/40 px-6 py-3 text-center text-sm font-bold text-white transition hover:bg-white/10"
+                >
+                  Create Account
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
+    </>
   );
 }

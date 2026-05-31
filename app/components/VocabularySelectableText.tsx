@@ -97,7 +97,7 @@ export function VocabularySelectableText({ text, source, taskId, className = "" 
           }}
         >
           <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-white px-3 py-2 shadow-xl text-xs min-w-[200px]">
-            <span className="text-gray-500">Add to vocabulary</span>
+            <span className="text-gray-600">Add to vocabulary</span>
             <span className="font-semibold text-gray-900">{stripWord(popover.word) || popover.word.trim()}</span>
             <button
               type="button"

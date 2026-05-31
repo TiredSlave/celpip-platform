@@ -1,5 +1,7 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { buildPageMetadata } from "../../lib/site-seo";
 import { allTemplateTasks, getTemplateTask } from "../templates-data";
 
 const criteria = [
@@ -1779,7 +1781,7 @@ function SpeakingTask3Page() {
               <h3 className="mt-5 font-black">Picture</h3>
               <div className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
                 <img
-                  src="/api/template-images/speaking-task-3"
+                  src="/template-images/speaking-task-3.png"
                   alt="Farm scene with riders, workers, a red barn, apple picking, and green hills"
                   className="h-auto w-full object-cover"
                 />
@@ -2017,7 +2019,7 @@ function SpeakingTask4Page() {
               <h3 className="mt-5 font-black">Picture</h3>
               <div className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
                 <img
-                  src="/api/template-images/speaking-task-3"
+                  src="/template-images/speaking-task-3.png"
                   alt="Farm scene with riders, workers, a red barn, apple picking, and green hills"
                   className="h-auto w-full object-cover"
                 />
@@ -3093,7 +3095,7 @@ function SpeakingTask8Page() {
               <h3 className="mt-5 font-black">Picture</h3>
               <div className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
                 <img
-                  src="/api/template-images/speaking-task-8"
+                  src="/template-images/speaking-task-8.png"
                   alt="A large brown bear sitting on King Street in front of a stopped city bus in downtown Toronto"
                   className="h-auto w-full object-cover"
                 />
@@ -3150,6 +3152,30 @@ function SpeakingTask8Page() {
 
 export function generateStaticParams() {
   return allTemplateTasks.map(task => ({ taskId: task.id }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ taskId: string }>;
+}): Promise<Metadata> {
+  const { taskId } = await params;
+  const task = getTemplateTask(taskId);
+  if (!task) {
+    return buildPageMetadata({ title: "Template Not Found", noIndex: true });
+  }
+
+  return buildPageMetadata({
+    title: `CELPIP ${task.skill} ${task.task}: ${task.title}`,
+    description: `${task.subtitle} Free CELPIP ${task.skill.toLowerCase()} template with structure, scoring tips, and examples. ${task.time}.`,
+    path: `/templates/${task.id}`,
+    keywords: [
+      `CELPIP ${task.skill.toLowerCase()} ${task.task.toLowerCase()}`,
+      `CELPIP ${task.title.toLowerCase()}`,
+      "CELPIP template",
+    ],
+    ogType: "article",
+  });
 }
 
 export default async function TemplateDetailPage({ params }: { params: Promise<{ taskId: string }> }) {

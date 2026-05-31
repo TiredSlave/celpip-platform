@@ -2,6 +2,8 @@
 import { useState, Suspense } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
+import { BrandLogo } from "../components/BrandLogo";
+import { SITE_NAME } from "../lib/brand";
 
 function LoginForm() {
   const router = useRouter();
@@ -35,9 +37,9 @@ function LoginForm() {
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white rounded-xl shadow p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-blue-700">CELPIP Practice</h1>
-          <p className="text-gray-500 mt-2">Login to your account</p>
+        <div className="flex flex-col items-center mb-8">
+          <BrandLogo size="lg" />
+          <p className="text-gray-600 mt-4">Login to your {SITE_NAME} account</p>
         </div>
 
         {confirmed && (
@@ -86,7 +88,7 @@ function LoginForm() {
           {loading ? "⏳ Logging in..." : "Login"}
         </button>
 
-        <p className="text-center text-gray-500 text-sm mt-6">
+        <p className="text-center text-gray-600 text-sm mt-6">
           Don't have an account?{" "}
           <a href="/signup" className="text-blue-600 font-semibold hover:underline">
             Sign up free

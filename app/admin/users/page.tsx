@@ -105,7 +105,7 @@ export default function UsersPage() {
       <div className="bg-white rounded-xl shadow overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50">
-            <tr className="text-left text-gray-500 text-sm">
+            <tr className="text-left text-gray-700 text-sm font-semibold">
               <th className="px-6 py-4">User</th>
               <th className="px-6 py-4">Type</th>
               <th className="px-6 py-4">Premium Expires</th>
@@ -117,13 +117,13 @@ export default function UsersPage() {
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
+                <td colSpan={6} className="px-6 py-8 text-center text-gray-600">
                   Loading users...
                 </td>
               </tr>
             ) : filteredUsers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
+                <td colSpan={6} className="px-6 py-8 text-center text-gray-600">
                   No users found
                 </td>
               </tr>
@@ -131,7 +131,7 @@ export default function UsersPage() {
               <tr key={user.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4">
                   <p className="font-medium text-gray-800">{user.email}</p>
-                  <p className="text-sm text-gray-400">{user.full_name || "No name"}</p>
+                  <p className="text-sm text-gray-600">{user.full_name || "No name"}</p>
                 </td>
                 <td className="px-6 py-4">
                   <span className={`text-xs font-bold px-2 py-1 rounded-full ${
@@ -147,12 +147,12 @@ export default function UsersPage() {
                     </span>
                   )}
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500">
+                <td className="px-6 py-4 text-sm text-gray-600">
                   {user.premium_expires_at
                     ? new Date(user.premium_expires_at).toLocaleDateString()
                     : "—"}
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500">
+                <td className="px-6 py-4 text-sm text-gray-600">
                   {new Date(user.created_at).toLocaleDateString()}
                 </td>
                 <td className="px-6 py-4">
@@ -197,7 +197,7 @@ export default function UsersPage() {
             <h2 className="text-xl font-bold text-gray-800 mb-4">
               Edit User
             </h2>
-            <p className="text-gray-500 text-sm mb-4">{editingUser.email}</p>
+            <p className="text-gray-600 text-sm mb-4">{editingUser.email}</p>
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">

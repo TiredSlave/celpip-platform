@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
+import { BrandLogo } from "../components/BrandLogo";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -55,7 +56,7 @@ export default function SignupPage() {
         <div className="bg-white rounded-xl shadow p-8 w-full max-w-md text-center">
           <div className="text-6xl mb-4">📧</div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Check Your Email!</h2>
-          <p className="text-gray-500 mb-6">
+          <p className="text-gray-600 mb-6">
             We sent a confirmation link to <strong>{email}</strong>.
             Click it to activate your account.
           </p>
@@ -72,9 +73,9 @@ export default function SignupPage() {
       <div className="bg-white rounded-xl shadow p-8 w-full max-w-md">
 
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-blue-700">CELPIP Practice</h1>
-          <p className="text-gray-500 mt-2">Create your free account</p>
+        <div className="flex flex-col items-center mb-8">
+          <BrandLogo size="lg" />
+          <p className="text-gray-600 mt-4">Create your free account</p>
         </div>
 
         {error && (
@@ -87,7 +88,7 @@ export default function SignupPage() {
         {/* Divider */}
         <div className="flex items-center gap-3 mb-6">
           <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400 font-medium">or sign up with email</span>
+          <span className="text-xs text-gray-600 font-medium">or sign up with email</span>
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
@@ -136,7 +137,7 @@ export default function SignupPage() {
         {/* Divider */}
         <div className="flex items-center gap-3 my-6">
           <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400 font-medium">or continue with</span>
+          <span className="text-xs text-gray-600 font-medium">or continue with</span>
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
@@ -164,7 +165,7 @@ export default function SignupPage() {
           </button>
         </div>
 
-        <p className="text-center text-gray-500 text-sm mt-6">
+        <p className="text-center text-gray-600 text-sm mt-6">
           Already have an account?{" "}
           <a href="/login" className="text-blue-600 font-semibold hover:underline">Login</a>
         </p>

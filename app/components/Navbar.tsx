@@ -3,10 +3,14 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "../lib/supabase";
+import { READING_PARTS, readingPartFilterLabel } from "../lib/reading-task-types";
+import UserMenu from "./UserMenu";
+import { BrandLogo } from "./BrandLogo";
 
 const PRACTICE_MENU = [
   {
-    section: "✍️ Writing",
+    section: "Writing",
+    sectionIcon: "✍️",
     sectionHome: "/practice/writing",
     items: [
       { label: "Task 1 — Write an Email", href: "/practice/writing?filter=Writing Task 1" },
@@ -14,17 +18,17 @@ const PRACTICE_MENU = [
     ],
   },
   {
-    section: "📖 Reading",
+    section: "Reading",
+    sectionIcon: "📖",
     sectionHome: "/practice/reading",
-    items: [
-      { label: "Part 1 — Correspondence", href: "/practice/reading?filter=Reading Correspondence" },
-      { label: "Part 2 — Apply Information", href: "/practice/reading?filter=Reading to Apply Information" },
-      { label: "Part 3 — Information", href: "/practice/reading?filter=Reading for Information" },
-      { label: "Part 4 — Viewpoints", href: "/practice/reading?filter=Reading for Viewpoints" },
-    ],
+    items: READING_PARTS.map(part => ({
+      label: readingPartFilterLabel(part),
+      href: `/practice/reading?filter=${encodeURIComponent(part.key)}`,
+    })),
   },
   {
-    section: "🎤 Speaking",
+    section: "Speaking",
+    sectionIcon: "🎤",
     sectionHome: "/practice/speaking",
     items: [
       { label: "Task 1 — Give Advice", href: "/practice/speaking?filter=Speaking Task 1" },
@@ -38,7 +42,8 @@ const PRACTICE_MENU = [
     ],
   },
   {
-    section: "🎧 Listening",
+    section: "Listening",
+    sectionIcon: "🎧",
     sectionHome: "/practice/listening",
     items: [
       { label: "Part 1 — Problem Solving", href: "/practice/listening?filter=Listening - Problem Solving" },
@@ -52,10 +57,10 @@ const PRACTICE_MENU = [
 ];
 
 const SECTION_COLORS: Record<string, { dot: string; text: string; activeBg: string; hover: string }> = {
-  "✍️ Writing":  { dot: "bg-blue-400",   text: "text-blue-700",   activeBg: "bg-blue-100",   hover: "hover:bg-blue-50"   },
-  "📖 Reading":  { dot: "bg-green-400",  text: "text-green-700",  activeBg: "bg-green-100",  hover: "hover:bg-green-50"  },
-  "🎤 Speaking": { dot: "bg-purple-400", text: "text-purple-700", activeBg: "bg-purple-100", hover: "hover:bg-purple-50" },
-  "🎧 Listening":{ dot: "bg-orange-400", text: "text-orange-700", activeBg: "bg-orange-100", hover: "hover:bg-orange-50" },
+  Writing: { dot: "bg-blue-500", text: "text-blue-800", activeBg: "bg-blue-100", hover: "hover:bg-blue-50" },
+  Reading: { dot: "bg-green-500", text: "text-green-800", activeBg: "bg-green-100", hover: "hover:bg-green-50" },
+  Speaking: { dot: "bg-purple-500", text: "text-purple-800", activeBg: "bg-purple-100", hover: "hover:bg-purple-50" },
+  Listening: { dot: "bg-orange-500", text: "text-orange-800", activeBg: "bg-orange-100", hover: "hover:bg-orange-50" },
 };
 
 export default function Navbar() {
@@ -63,7 +68,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [practiceOpen, setPracticeOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState("✍️ Writing");
+  const [activeSection, setActiveSection] = useState("Writing");
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -82,151 +87,152 @@ export default function Navbar() {
     return () => document.removeEventListener("pointerdown", handlePointerDown, true);
   }, []);
 
-  /** When opening the menu, match the highlighted section to the current practice route */
   useEffect(() => {
     if (!practiceOpen || !pathname) return;
     const match = PRACTICE_MENU.find(m => pathname.startsWith(m.sectionHome));
     if (match) setActiveSection(match.section);
   }, [practiceOpen, pathname]);
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    router.push("/login");
-  }
-
-  const isPracticeActive = ["/practice/writing/task", "/practice/reading/task", "/practice/speaking/task", "/practice/listening/task"].some(p => pathname?.startsWith(p));
+  const isPracticeActive = ["/practice/writing/task", "/practice/reading/task", "/practice/speaking/task", "/practice/listening/task"].some(p =>
+    pathname?.startsWith(p),
+  );
   const colors = SECTION_COLORS[activeSection];
 
+  const navLinkClass = (active: boolean) =>
+    `px-4 py-2.5 rounded-xl text-[15px] font-semibold tracking-tight transition ${
+      active ? "bg-blue-600 text-white shadow-sm shadow-blue-600/25" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+    }`;
+
   return (
-    <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-      <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-16">
+    <header className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/95 backdrop-blur-md shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 min-h-[4.25rem] py-3">
+          {/* Logo */}
+          <BrandLogo />
 
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">C</div>
-          <span className="font-bold text-gray-800 text-lg">CELPIP Practice</span>
-        </Link>
+          {/* Nav */}
+          <nav className="flex flex-wrap items-center justify-center gap-1 flex-1 order-3 lg:order-none w-full lg:w-auto basis-full lg:basis-auto">
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => setPracticeOpen(o => !o)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[15px] font-semibold tracking-tight transition ${
+                  practiceOpen || isPracticeActive
+                    ? "bg-blue-600 text-white shadow-sm shadow-blue-600/25"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                Practice
+                <svg
+                  className={`w-5 h-5 transition-transform ${practiceOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
-        {/* Nav Items */}
-        <div className="flex items-center gap-1">
+              {practiceOpen && (
+                <div className="absolute top-full left-0 mt-3 w-[min(680px,calc(100vw-2rem))] bg-white rounded-2xl shadow-xl border border-gray-200/80 overflow-hidden">
+                  <div className="flex min-h-[280px]">
+                    <div className="w-52 bg-slate-50 border-r border-gray-100 p-3 space-y-1">
+                      {PRACTICE_MENU.map(s => {
+                        const c = SECTION_COLORS[s.section];
+                        const active = activeSection === s.section;
+                        return (
+                          <button
+                            key={s.section}
+                            type="button"
+                            onClick={() => {
+                              setActiveSection(s.section);
+                              setPracticeOpen(false);
+                              router.push(s.sectionHome);
+                            }}
+                            className={`w-full text-left px-4 py-3 rounded-xl text-[15px] font-semibold transition flex items-center gap-2 ${
+                              active ? `${c.activeBg} ${c.text}` : "text-gray-700 hover:bg-white"
+                            }`}
+                          >
+                            <span aria-hidden>{s.sectionIcon}</span>
+                            {s.section}
+                          </button>
+                        );
+                      })}
+                    </div>
 
-          {/* Practice Dropdown */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setPracticeOpen(o => !o)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition ${
-                practiceOpen || isPracticeActive ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              Practice
-              <svg className={`w-4 h-4 transition-transform ${practiceOpen ? "rotate-180" : ""}`}
-                fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {/* Mega Dropdown */}
-            {practiceOpen && (
-              <div className="absolute top-full left-0 mt-2 w-[640px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
-                <div className="flex">
-
-                  {/* Left — Section tabs (opens that skill’s task list) */}
-                  <div className="w-48 bg-gray-50 border-r border-gray-100 p-3 space-y-1">
-                    {PRACTICE_MENU.map(s => {
-                      const c = SECTION_COLORS[s.section];
-                      return (
-                        <button
-                          key={s.section}
-                          type="button"
-                          onClick={() => {
-                            setActiveSection(s.section);
-                            setPracticeOpen(false);
-                            router.push(s.sectionHome);
-                          }}
-                          className={`w-full text-left px-4 py-3 rounded-xl text-sm font-semibold transition ${
-                            activeSection === s.section ? `${c.activeBg} ${c.text}` : "text-gray-600 hover:bg-gray-100"
-                          }`}
-                        >
-                          {s.section}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Right — Task list */}
-                  <div className="flex-1 p-4">
-                    <p className={`text-xs font-bold uppercase tracking-wide mb-3 ${colors.text}`}>
-                      Select a task
-                    </p>
-                    <div className="space-y-1">
-                      {PRACTICE_MENU.find(s => s.section === activeSection)?.items.map(item => (
-                        <Link
-                          key={item.label + item.href}
-                          href={item.href}
-                          onClick={() => setPracticeOpen(false)}
-                          className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-700 transition ${colors.hover}`}
-                        >
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${colors.dot}`} />
-                          {item.label}
-                        </Link>
-                      ))}
+                    <div className="flex-1 p-5">
+                      <p className={`text-sm font-bold uppercase tracking-wide mb-4 ${colors.text}`}>
+                        Select a task
+                      </p>
+                      <div className="space-y-1 max-h-[240px] overflow-y-auto pr-1">
+                        {PRACTICE_MENU.find(s => s.section === activeSection)?.items.map(item => (
+                          <Link
+                            key={item.label + item.href}
+                            href={item.href}
+                            onClick={() => setPracticeOpen(false)}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] text-gray-800 font-medium transition ${colors.hover}`}
+                          >
+                            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${colors.dot}`} />
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Footer */}
-                <div className="border-t border-gray-100 px-5 py-3 bg-gray-50 flex items-center justify-between">
-                  <p className="text-xs text-gray-400">Select a section and task to begin practicing</p>
-                  <Link href="/practice" onClick={() => setPracticeOpen(false)}
-                    className="text-xs text-blue-600 font-semibold hover:underline">
-                    View all →
-                  </Link>
+                  <div className="border-t border-gray-100 px-5 py-3.5 bg-slate-50 flex items-center justify-between">
+                    <p className="text-sm text-gray-600">Pick a skill, then choose a task to practice</p>
+                    <Link
+                      href="/practice"
+                      onClick={() => setPracticeOpen(false)}
+                      className="text-sm text-blue-700 font-semibold hover:underline"
+                    >
+                      View all →
+                    </Link>
+                  </div>
                 </div>
-              </div>
+              )}
+            </div>
+
+            {[
+              { label: "Mock Test", href: "/mock-test" },
+              { label: "Templates", href: "/templates" },
+              { label: "Vocabulary", href: "/vocabulary" },
+            ].map(item => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={navLinkClass(Boolean(pathname?.startsWith(item.href)))}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* Auth */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {user ? (
+              <UserMenu user={{ id: user.id, email: user.email }} />
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="px-4 py-2.5 text-[15px] font-semibold text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/signup"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[15px] font-semibold rounded-xl shadow-sm shadow-blue-600/20 transition"
+                >
+                  Sign up free
+                </Link>
+              </>
             )}
           </div>
-
-          {/* Other nav items */}
-          {[
-            { label: "Mock Test", href: "/mock-test" },
-            { label: "Templates", href: "/templates" },
-            { label: "Vocabulary", href: "/vocabulary" },
-          ].map(item => (
-            <Link key={item.href} href={item.href}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
-                pathname?.startsWith(item.href) ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
-              }`}>
-              {item.label}
-            </Link>
-          ))}
-        </div>
-
-        {/* Auth */}
-        <div className="flex items-center gap-3">
-          {user ? (
-            <div className="flex items-center gap-3">
-              <Link href="/dashboard" className="text-sm text-gray-600 hover:text-gray-800 font-medium transition">
-                Dashboard
-              </Link>
-              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">
-                {user.email?.[0]?.toUpperCase()}
-              </div>
-              <button onClick={handleLogout} className="text-sm text-gray-400 hover:text-red-500 transition">
-                Logout
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Link href="/login" className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 transition">
-                Login
-              </Link>
-              <Link href="/signup" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition">
-                Sign up free
-              </Link>
-            </div>
-          )}
         </div>
       </div>
-    </nav>
+    </header>
   );
 }

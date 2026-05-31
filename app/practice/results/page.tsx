@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
+import { buildTaskPracticeHref, readResultsReturn } from "../../lib/practice-navigation";
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
+import { clearMockTestContext, getMockTestContext } from "../../lib/mock-test-context";
 
 type Question = {
   id: number;
@@ -80,6 +82,7 @@ function ResultsContent() {
   const [result, setResult] = useState<Result | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [mockReturnId, setMockReturnId] = useState<string | null>(null);
 
   useEffect(() => {
     const data = sessionStorage.getItem("celpip_result");
@@ -87,6 +90,34 @@ function ResultsContent() {
     const parsed = JSON.parse(data);
     setResult(parsed);
     saveResult(parsed);
+    void markMockPartComplete();
+  }, []);
+
+  async function markMockPartComplete() {
+    const ctx = getMockTestContext();
+    if (!ctx) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    try {
+      await fetch(`/api/mock-tests/${ctx.mockTestId}/attempt`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ attempt_id: ctx.attemptId, order_number: ctx.order }),
+      });
+    } catch (e) {
+      console.error(e);
+    }
+    sessionStorage.setItem("celpip_mock_return", ctx.mockTestId);
+    setMockReturnId(ctx.mockTestId);
+    clearMockTestContext();
+  }
+
+  useEffect(() => {
+    const id = sessionStorage.getItem("celpip_mock_return");
+    if (id) setMockReturnId(id);
   }, []);
 
   async function saveResult(r: Result) {
@@ -139,9 +170,11 @@ function ResultsContent() {
     listening: { btn: "bg-orange-600 hover:bg-orange-700",text: "text-orange-600", back: "/practice/listening" },
   }[section];
 
+  const sectionListHref = readResultsReturn(sectionStyle.back);
+
   const retakeHref = result.taskId
-    ? `/practice/${section}/task?taskId=${encodeURIComponent(result.taskId)}`
-    : sectionStyle.back;
+    ? buildTaskPracticeHref(section, result.taskId, sectionListHref)
+    : sectionListHref;
 
   const isWriting = result.taskType.includes("Writing");
   const isSpeaking = result.taskType.includes("Speaking");
@@ -164,10 +197,19 @@ function ResultsContent() {
             <Link href={sectionStyle.back} className={"text-sm hover:underline " + sectionStyle.text}>
               ← Back to {section.charAt(0).toUpperCase() + section.slice(1)} Practice
             </Link>
+            {mockReturnId && (
+              <Link
+                href={`/mock-test/${mockReturnId}`}
+                className="block text-sm text-indigo-700 font-medium hover:underline mt-1"
+                onClick={() => sessionStorage.removeItem("celpip_mock_return")}
+              >
+                ← Continue mock test
+              </Link>
+            )}
             <h1 className="text-2xl font-bold text-gray-900 mt-2">Results</h1>
-            <p className="text-sm text-gray-500">{result.taskType}</p>
+            <p className="text-sm text-gray-600">{result.taskType}</p>
           </div>
-          {saving && <span className="text-xs text-gray-400">Saving...</span>}
+          {saving && <span className="text-xs text-gray-600">Saving...</span>}
           {saved && <span className="text-xs text-green-600 font-medium">✅ Saved to history</span>}
         </div>
 
@@ -176,7 +218,7 @@ function ResultsContent() {
           <div className={"text-6xl font-bold mb-2 " + scoreColor}>{result.score}/{result.total}</div>
           <div className={"text-2xl font-semibold mb-1 " + scoreColor}>{pct}%</div>
           {(isWriting || isSpeaking) && (
-            <p className="text-gray-500 text-xs mb-2">Practice band score (12 = strongest for this drill)</p>
+            <p className="text-gray-600 text-xs mb-2">Practice band score (12 = strongest for this drill)</p>
           )}
           <p className="text-gray-600 text-sm">
             {pct >= 80 ? "Excellent work! 🎉" : pct >= 60 ? "Good effort! Keep practicing 💪" : "Keep going — practice makes perfect! 📚"}
@@ -204,7 +246,7 @@ function ResultsContent() {
                     <span className="block mt-2 text-gray-600 leading-relaxed">&ldquo;{result.writingTask2ChosenLabel}&rdquo;</span>
                   ) : null}
                 </p>
-                <p className="text-xs text-gray-500 mt-2">Feedback below was scored against this option.</p>
+                <p className="text-xs text-gray-600 mt-2">Feedback below was scored against this option.</p>
               </div>
             )}
 
@@ -249,7 +291,7 @@ function ResultsContent() {
                         <p className="text-xs font-bold text-yellow-800 mb-1">💡 How this is scored</p>
                         <p className="text-xs text-yellow-800 leading-relaxed">{meta.rule}</p>
                       </div>
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Your feedback</p>
+                      <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Your feedback</p>
                       <p className="text-sm text-gray-700 leading-relaxed">{String(val)}</p>
                     </div>
                   );
@@ -324,14 +366,14 @@ function ResultsContent() {
                             <p className="text-sm font-semibold text-gray-800">{meta.label}</p>
                           </div>
                           <span className={"text-lg font-bold tabular-nums " + bandAccentClass(band)}>
-                            {band}<span className="text-gray-400 text-sm font-semibold"> /12</span>
+                            {band}<span className="text-gray-600 text-sm font-semibold"> /12</span>
                           </span>
                         </div>
                         <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 mb-4">
                           <p className="text-xs font-bold text-yellow-800 mb-1">💡 How this is scored</p>
                           <p className="text-xs text-yellow-800 leading-relaxed">{meta.rule}</p>
                         </div>
-                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Your score</p>
+                        <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Your score</p>
                         <p className="text-sm text-gray-700 leading-relaxed">
                           Practice band <strong className={bandAccentClass(band)}>{band}</strong> out of 12 for this dimension.
                         </p>
@@ -388,7 +430,7 @@ function ResultsContent() {
               const userAnswer = result.answers[q.id];
               const isCorrect = userAnswer === q.correct_answer;
               return (
-                <div key={q.id} className="bg-white border border-gray-200 rounded-2xl p-6">
+                <div key={`${q.id}-${i}`} className="bg-white border border-gray-200 rounded-2xl p-6">
                   <div className="flex items-start gap-3 mb-4">
                     <span className={"w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white " + (isCorrect ? "bg-green-500" : "bg-red-500")}>
                       {isCorrect ? "✓" : "✗"}
@@ -402,9 +444,9 @@ function ResultsContent() {
                       const isUserWrong = opt === userAnswer && !isCorrectOpt;
                       const explanation = q.option_explanations?.[opt];
                       return (
-                        <div key={opt} className={"rounded-xl border p-3 " + (isCorrectOpt ? "border-green-400 bg-green-50" : isUserWrong ? "border-red-400 bg-red-50" : "border-gray-100 bg-gray-50")}>
+                        <div key={`${i}-${opt}`} className={"rounded-xl border p-3 " + (isCorrectOpt ? "border-green-400 bg-green-50" : isUserWrong ? "border-red-400 bg-red-50" : "border-gray-100 bg-gray-50")}>
                           <div className="flex items-center gap-3 mb-1">
-                            <span className={"w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs font-bold " + (isCorrectOpt ? "border-green-500 bg-green-500 text-white" : isUserWrong ? "border-red-400 bg-red-400 text-white" : "border-gray-300 text-gray-400")}>
+                            <span className={"w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs font-bold " + (isCorrectOpt ? "border-green-500 bg-green-500 text-white" : isUserWrong ? "border-red-400 bg-red-400 text-white" : "border-gray-300 text-gray-600")}>
                               {isCorrectOpt ? "✓" : isUserWrong ? "✗" : opt}
                             </span>
                             <span className={"text-sm font-medium " + (isCorrectOpt ? "text-green-800" : isUserWrong ? "text-red-800" : "text-gray-600")}>
@@ -414,7 +456,7 @@ function ResultsContent() {
                             {isUserWrong && <span className="ml-auto text-xs font-bold text-red-500">Your answer</span>}
                           </div>
                           {explanation && (
-                            <p className={"text-xs ml-9 leading-relaxed " + (isCorrectOpt ? "text-green-700" : isUserWrong ? "text-red-700" : "text-gray-500")}>
+                            <p className={"text-xs ml-9 leading-relaxed " + (isCorrectOpt ? "text-green-700" : isUserWrong ? "text-red-700" : "text-gray-600")}>
                               {explanation}
                             </p>
                           )}
@@ -438,8 +480,8 @@ function ResultsContent() {
           <Link href={retakeHref} className={"flex-1 text-center py-3 rounded-xl text-white font-semibold text-sm transition " + sectionStyle.btn}>
             Re-take
           </Link>
-          <Link href={sectionStyle.back} className="flex-1 text-center py-3 rounded-xl border border-gray-200 text-gray-700 font-semibold text-sm hover:bg-gray-50 transition">
-            Back to Practice
+          <Link href={sectionListHref} replace className="flex-1 text-center py-3 rounded-xl border border-gray-200 text-gray-700 font-semibold text-sm hover:bg-gray-50 transition">
+            Back to task list
           </Link>
         </div>
 

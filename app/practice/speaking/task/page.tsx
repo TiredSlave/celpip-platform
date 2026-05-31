@@ -1,8 +1,16 @@
 "use client";
 import { useEffect, useState, useRef, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
+import { finishMockPracticePart, parseMockPracticeParams, remainingMockSeconds } from "../../../lib/mock-test-practice";
+import { formatMockTime } from "../../../lib/mock-test-times";
+import { storeResultsReturn, taskReturnHref } from "../../../lib/practice-navigation";
+import { navigatePracticeTask } from "../../../lib/practice-task-nav";
+import { usePracticeTaskSiblings } from "../../../lib/use-practice-task-siblings";
+import { PracticeTaskTypeDropdown } from "../../../components/PracticeTaskTypeDropdown";
+import { speakingTask34LearnerPrompt } from "../../../lib/speaking-task34-requirement";
+import { task5OptionImageUrl } from "../../../lib/speaking-task5-ui";
 
 type SpeakingTask = {
   id: string;
@@ -37,8 +45,11 @@ function getBandColor(band: number) {
 }
 
 function SpeakingContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const taskId = searchParams.get("taskId");
+  const listReturnHref = taskReturnHref(searchParams, "/practice/speaking");
+  const mockParams = parseMockPracticeParams(searchParams);
   const [task, setTask] = useState<SpeakingTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -53,8 +64,33 @@ function SpeakingContent() {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const selectedOptionRef = useRef<"A" | "B" | null>(null);
+  const [mockTimeLeft, setMockTimeLeft] = useState<number | null>(null);
+  const mockExpiredRef = useRef(false);
+  const taskSiblings = usePracticeTaskSiblings(
+    "speaking",
+    taskId,
+    task?.task_type,
+  );
 
   useEffect(() => { loadTask(); }, [taskId]);
+
+  useEffect(() => {
+    if (!mockParams) return;
+    const tick = () => {
+      const left = remainingMockSeconds();
+      if (left === null) return;
+      setMockTimeLeft(left);
+      if (left <= 0 && !mockExpiredRef.current && phase === "recording") {
+        mockExpiredRef.current = true;
+        stopRecording();
+        setPhase("processing");
+        void submitAudio();
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [mockParams, phase]);
 
   useEffect(() => {
     if (!task || phase !== "idle") return;
@@ -66,9 +102,18 @@ function SpeakingContent() {
 
   async function loadTask() {
     setLoading(true);
+    setPhase("idle");
+    setEvaluation(null);
+    setTranscript("");
+    setSelectedOption(null);
+    selectedOptionRef.current = null;
+    setError("");
+    setShowEvalBtn(false);
     if (taskId) {
       const { data } = await supabase.from("admin_tasks").select("*").eq("id", taskId).single();
       setTask(data || null);
+    } else {
+      setTask(null);
     }
     setLoading(false);
   }
@@ -76,6 +121,7 @@ function SpeakingContent() {
   function startPreparation() {
     if (!task) return;
     setPhase("preparing");
+    setError("");
     const prepTime = task.content.preparation_time_seconds || 30;
     setPrepTimeLeft(prepTime);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -83,11 +129,12 @@ function SpeakingContent() {
       setPrepTimeLeft(prev => {
           if (prev <= 1) {
           clearInterval(timerRef.current!);
-          if ((task.content.task_number === 5 || task.content.task_number === 6) && !selectedOptionRef.current) {
-            selectedOptionRef.current = "A";
-            setSelectedOption("A");
+          const requiresChoice = task.content.task_number === 5 || task.content.task_number === 6;
+          if (requiresChoice && !selectedOptionRef.current) {
+            setError("Please choose Option A or Option B before recording.");
+            return 0;
           }
-          startRecording();
+          void startRecording();
           return 0;
         }
         return prev - 1;
@@ -153,7 +200,14 @@ function SpeakingContent() {
       const { data: { session } } = await supabase.auth.getSession();
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
-      let taskPrompt = task.content.prompt || task.content.situation || "";
+      let taskPrompt =
+        speakingTask34LearnerPrompt(
+          task.content.task_number,
+          task.content.prompt,
+        ) ||
+        task.content.prompt ||
+        task.content.situation ||
+        "";
       const opt = selectedOptionRef.current;
       if (opt && task.content.task_number === 6) {
         const chosen = opt === "A" ? task.content.option_a : task.content.option_b;
@@ -161,6 +215,9 @@ function SpeakingContent() {
       } else if (opt && task.content.task_number === 5) {
         const chosen = opt === "A" ? task.content.option_a : task.content.option_b;
         taskPrompt += "\n\nChose: " + chosen?.label + ". Must persuade " + task.content.person_to_persuade;
+        if (chosen?.facts?.length) {
+          taskPrompt += "\nFacts: " + chosen.facts.slice(0, 5).join(" | ");
+        }
       }
       formData.append("taskPrompt", taskPrompt);
       formData.append("taskNumber", String(task.content.task_number));
@@ -176,8 +233,27 @@ function SpeakingContent() {
           answers: {}, questions: [],
           feedback: data.evaluation, transcript: data.transcript, isSpeaking: true,
         };
+        if (mockParams) {
+          const fin = await finishMockPracticePart(
+            mockParams,
+            {
+              taskId: task.id,
+              taskType: task.task_type,
+              answers: {},
+              score: data.evaluation?.overall_band || 0,
+              total: 12,
+              feedback: data.evaluation,
+              transcript: data.transcript,
+              completedAt: new Date().toISOString(),
+            },
+            session?.access_token || "",
+          );
+          window.location.href = fin.nextUrl;
+          return;
+        }
         sessionStorage.setItem("celpip_result", JSON.stringify(result));
-        window.location.href = "/practice/results";
+        storeResultsReturn(listReturnHref);
+        router.push("/practice/results");
       }
     } catch {
       setError("Failed to evaluate. Please try again.");
@@ -192,25 +268,103 @@ function SpeakingContent() {
   }
 
   const taskNum = task?.content.task_number;
+  const isTask5 = taskNum === 5;
+  const learnerPrompt = task
+    ? speakingTask34LearnerPrompt(task.content.task_number, task.content.prompt)
+    : undefined;
+  const needsSinglePicture = taskNum === 3 || taskNum === 4 || taskNum === 8;
+  const speakingImageClass = "w-full aspect-square object-cover rounded-lg";
+
+  function singleTaskImage() {
+    if (!task?.content.image_url) {
+      if (!needsSinglePicture) return null;
+      return (
+        <div
+          className={`${speakingImageClass} mb-4 max-w-lg bg-amber-50 border-2 border-dashed border-amber-300 flex flex-col items-center justify-center text-amber-900 text-sm text-center p-6`}
+        >
+          <span className="text-2xl mb-2">🖼️</span>
+          <span>Picture missing for this task.</span>
+          <span className="text-xs mt-1">Ask an admin to regenerate it in Admin → Tasks.</span>
+        </div>
+      );
+    }
+    return (
+      <img src={task.content.image_url} alt="Task" className={`${speakingImageClass} mb-4 max-w-lg`} />
+    );
+  }
 
   if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" /></div>;
-  if (!task) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-center"><div className="text-5xl mb-4">📭</div><h2 className="text-xl font-bold text-gray-800 mb-2">Task not found</h2><Link href="/practice/speaking" className="text-purple-600 hover:underline">← Back</Link></div></div>;
+  if (!task) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-center"><div className="text-5xl mb-4">📭</div><h2 className="text-xl font-bold text-gray-800 mb-2">Task not found</h2><Link href={listReturnHref} className="text-purple-600 hover:underline">← Back</Link></div></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
-        <div>
-          <Link href="/practice/speaking" className="text-sm text-purple-600 hover:underline">← Speaking Practice</Link>
-          <h1 className="text-lg font-bold text-gray-900">Speaking {task.content.task_type}</h1>
+        <div className="flex items-center gap-4 min-w-0">
+          <Link href={listReturnHref} className="text-sm text-purple-600 hover:underline shrink-0">← Library</Link>
+          <div className="min-w-0">
+            <PracticeTaskTypeDropdown
+              section="speaking"
+              currentLabel={task.task_type}
+              currentTaskType={task.task_type}
+            />
+            {taskSiblings.total > 0 && (
+              <p className="text-xs text-gray-500">
+                Task {taskSiblings.position} of {taskSiblings.total}
+              </p>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className={`text-xs font-bold px-2 py-1 rounded-full ${task.difficulty === "hard" ? "bg-red-100 text-red-700" : task.difficulty === "easy" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>{task.difficulty}</span>
-          <span className="text-xs text-gray-500">⏱ {task.content.preparation_time_seconds}s prep · {task.content.speaking_time_seconds}s speak</span>
+        <div className="flex items-center gap-3 shrink-0">
+          {!mockParams && (
+            <>
+              <button
+                type="button"
+                onClick={() => taskSiblings.prevId && navigatePracticeTask(router, "speaking", taskSiblings.prevId, listReturnHref)}
+                disabled={!taskSiblings.prevId}
+                className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 disabled:opacity-30 transition"
+              >
+                PREV
+              </button>
+              <button
+                type="button"
+                onClick={() => taskSiblings.nextId && navigatePracticeTask(router, "speaking", taskSiblings.nextId, listReturnHref)}
+                disabled={!taskSiblings.nextId}
+                className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 disabled:opacity-30 transition"
+              >
+                NEXT
+              </button>
+            </>
+          )}
+          {mockParams && mockTimeLeft !== null && (
+            <div
+              className={`px-3 py-1 rounded-full border-2 font-mono text-sm font-bold ${
+                mockTimeLeft < 60
+                  ? "border-red-500 text-red-600 bg-red-50"
+                  : "border-purple-500 text-purple-600 bg-purple-50"
+              }`}
+            >
+              🕐 {formatMockTime(mockTimeLeft)}
+            </div>
+          )}
+          <span className="text-xs text-gray-600">
+            ⏱ {task.content.preparation_time_seconds}s prep · {task.content.speaking_time_seconds}s speak
+          </span>
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-4">
-        {error && <div className="bg-red-50 text-red-600 rounded-lg p-4 text-sm">❌ {error}</div>}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div
+          className={`h-full grid grid-cols-1 gap-0 ${
+            isTask5 ? "lg:grid-cols-3" : "lg:grid-cols-2"
+          }`}
+        >
+          {/* LEFT: Task content + photos/instructions (Task 5 = 2/3 width) */}
+          <div
+            className={`overflow-y-auto bg-gray-50 px-6 py-6 lg:px-10 lg:py-8 min-h-0 ${
+              isTask5 ? "lg:col-span-2" : ""
+            }`}
+          >
+            {error && <div className="bg-red-50 text-red-600 rounded-lg p-4 text-sm mb-4">❌ {error}</div>}
 
         {/* PREPARING */}
         {phase === "preparing" && (
@@ -220,33 +374,68 @@ function SpeakingContent() {
                 <p className="text-xs font-bold text-purple-600 uppercase mb-1">Situation</p>
                 <p className="text-gray-800">{task.content.situation}</p>
               </div>
-              {task.content.image_url && <img src={task.content.image_url} alt="Task" className="w-full rounded-lg mb-4" style={{maxHeight:"300px",objectFit:"cover"}} />}
+              {singleTaskImage()}
               {task.content.image_url_1 && !task.content.option_a && (
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <img src={task.content.image_url_1} alt="Image 1" className="w-full rounded-lg" style={{height:"160px",objectFit:"cover"}} />
-                  <img src={task.content.image_url_2} alt="Image 2" className="w-full rounded-lg" style={{height:"160px",objectFit:"cover"}} />
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <img src={task.content.image_url_1} alt="Image 1" className={speakingImageClass} />
+                  <img src={task.content.image_url_2} alt="Image 2" className={speakingImageClass} />
                 </div>
               )}
-              {taskNum === 5 && task.content.option_a && task.content.option_b && (
-                <div className="mb-4">
-                  <p className="text-sm text-gray-600 mb-3">Click to select your option. Timer continues.</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {(["A","B"] as const).map(opt => {
+              {isTask5 && task.content.option_a && task.content.option_b && (
+                <div className="mb-4 space-y-4">
+                  <p className="text-sm text-gray-600">Click to select your option. Timer continues.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {(["A", "B"] as const).map(opt => {
                       const option = opt === "A" ? task.content.option_a : task.content.option_b;
                       const isSelected = selectedOption === opt;
                       return (
-                        <div key={opt} onClick={() => handleSelectOption(opt)}
-                          className={`border-2 rounded-xl overflow-hidden cursor-pointer transition ${isSelected ? "border-purple-500 ring-2 ring-purple-200" : "border-gray-200 hover:border-purple-300"}`}>
-                          {option?.image_url ? <img src={option.image_url} alt={option.label} className="w-full h-32 object-cover" /> : <div className="bg-gray-100 h-32 flex items-center justify-center text-gray-400 text-sm">🖼 {option?.label}</div>}
-                          <div className="p-2">
-                            <p className="font-bold text-gray-800 text-xs">{option?.label}</p>
-                            {option?.details && Object.entries(option.details).slice(0,3).map(([k,v]) => <p key={k} className="text-xs text-gray-500">• {v as string}</p>)}
-                            {isSelected && <p className="text-xs text-purple-600 font-bold mt-1">✓ Selected</p>}
+                        <div
+                          key={opt}
+                          onClick={() => handleSelectOption(opt)}
+                          className={`border-2 rounded-xl overflow-hidden cursor-pointer transition ${
+                            isSelected
+                              ? "border-purple-500 ring-2 ring-purple-200"
+                              : "border-gray-200 hover:border-purple-300"
+                          }`}
+                        >
+                          {task5OptionImageUrl(task.content, opt) ? (
+                            <img
+                              src={task5OptionImageUrl(task.content, opt)}
+                              alt={option.label}
+                              className={speakingImageClass}
+                            />
+                          ) : (
+                            <div className="aspect-square bg-gray-100 flex items-center justify-center text-gray-600 text-sm">
+                              🖼 {option?.label}
+                            </div>
+                          )}
+                          <div className="p-3">
+                            <p className="font-bold text-gray-800 text-sm">{option?.label}</p>
+                            {Array.isArray(option?.facts) &&
+                              option.facts.slice(0, 5).map((fact: string, i: number) => (
+                                <p key={i} className="text-xs text-gray-600 mt-1">• {fact}</p>
+                              ))}
+                            {isSelected && (
+                              <p className="text-xs text-purple-600 font-bold mt-2">✓ Selected</p>
+                            )}
                           </div>
                         </div>
                       );
                     })}
                   </div>
+                  {task.content.prompt && (
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <p className="text-xs font-bold text-purple-700 mb-1">Instructions</p>
+                      <p className="text-sm text-gray-800">{task.content.prompt}</p>
+                    </div>
+                  )}
+                  {task.content.person_to_persuade && (
+                    <div className="bg-blue-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-700">
+                        <span className="font-bold">Person to persuade:</span> {task.content.person_to_persuade}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               {taskNum === 6 && task.content.option_a && task.content.option_b && (
@@ -261,7 +450,7 @@ function SpeakingContent() {
                           className={`p-4 rounded-xl border-2 text-left transition ${isSelected ? "border-purple-500 bg-purple-50 ring-2 ring-purple-200" : "border-gray-200 hover:border-purple-300"}`}>
                           <p className="text-xs font-bold text-purple-600 mb-1">Option {opt}</p>
                           <p className="text-sm font-semibold text-gray-800">{option?.person}</p>
-                          <p className="text-xs text-gray-500 mt-1">{option?.instruction}</p>
+                          <p className="text-xs text-gray-600 mt-1">{option?.instruction}</p>
                           {isSelected && <p className="text-xs text-purple-600 font-bold mt-2">✓ Selected</p>}
                         </button>
                       );
@@ -275,28 +464,18 @@ function SpeakingContent() {
                   <p className="text-sm text-gray-700">{selectedOption === "A" ? task.content.option_a?.person : task.content.option_b?.person}</p>
                 </div>
               )}
-              {task.content.prompt && <p className="text-sm font-medium text-gray-800">{task.content.prompt}</p>}
+              {!isTask5 && learnerPrompt && (
+                <div className="bg-purple-50 rounded-lg p-4 mt-3">
+                  <p className="text-xs font-bold text-purple-700 mb-1">Instructions</p>
+                  <p className="text-sm text-gray-800">{learnerPrompt}</p>
+                </div>
+              )}
               {task.content.tips?.length > 0 && (
                 <div className="bg-yellow-50 rounded-lg p-4 mt-3">
                   <p className="text-xs font-bold text-yellow-700 mb-2">💡 Tips</p>
                   <ul className="space-y-1">{task.content.tips.map((tip,i) => <li key={i} className="text-xs text-yellow-800 flex gap-2"><span>•</span>{tip}</li>)}</ul>
                 </div>
               )}
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-blue-600 font-bold text-sm">⏱ Preparation</span>
-                  <span className="text-blue-600 font-mono font-bold">{prepTimeLeft}s</span>
-                </div>
-                <button onClick={() => { if(timerRef.current) clearInterval(timerRef.current); startRecording(); }}
-                  className="text-xs text-blue-600 border border-blue-300 px-3 py-1 rounded-lg hover:bg-blue-100 transition">
-                  Skip → Start Recording
-                </button>
-              </div>
-              <div className="w-full bg-blue-200 rounded-full h-2">
-                <div className="bg-blue-500 h-2 rounded-full transition-all" style={{width:`${(prepTimeLeft/(task.content.preparation_time_seconds||30))*100}%`}} />
-              </div>
             </div>
           </>
         )}
@@ -309,28 +488,65 @@ function SpeakingContent() {
                 <p className="text-xs font-bold text-purple-600 uppercase mb-1">Situation</p>
                 <p className="text-gray-800">{task.content.situation}</p>
               </div>
-              {task.content.image_url && <img src={task.content.image_url} alt="Task" className="w-full rounded-lg mb-4" style={{maxHeight:"300px",objectFit:"cover"}} />}
+              {singleTaskImage()}
               {task.content.image_url_1 && !task.content.option_a && (
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <img src={task.content.image_url_1} alt="Image 1" className="w-full rounded-lg" style={{height:"160px",objectFit:"cover"}} />
-                  <img src={task.content.image_url_2} alt="Image 2" className="w-full rounded-lg" style={{height:"160px",objectFit:"cover"}} />
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <img src={task.content.image_url_1} alt="Image 1" className={speakingImageClass} />
+                  <img src={task.content.image_url_2} alt="Image 2" className={speakingImageClass} />
                 </div>
               )}
-              {taskNum === 5 && task.content.option_a && task.content.option_b && (
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  {(["A","B"] as const).map(opt => {
-                    const option = opt === "A" ? task.content.option_a : task.content.option_b;
-                    const isSelected = selectedOption === opt;
-                    return (
-                      <div key={opt} className={`border-2 rounded-xl overflow-hidden ${isSelected ? "border-purple-500" : "border-gray-200 opacity-60"}`}>
-                        {option?.image_url ? <img src={option.image_url} alt={option.label} className="w-full h-28 object-cover" /> : <div className="bg-gray-100 h-28 flex items-center justify-center text-gray-400 text-sm">🖼 {option?.label}</div>}
-                        <div className="p-2">
-                          <p className="font-bold text-gray-800 text-xs">{option?.label}</p>
-                          {isSelected && <p className="text-xs text-purple-600 font-bold">✓ Your choice</p>}
+              {isTask5 && task.content.option_a && task.content.option_b && (
+                <div className="mb-4 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {(["A", "B"] as const).map(opt => {
+                      const option = opt === "A" ? task.content.option_a : task.content.option_b;
+                      const isSelected = selectedOption === opt;
+                      return (
+                        <div
+                          key={opt}
+                          className={`border-2 rounded-xl overflow-hidden ${
+                            isSelected ? "border-purple-500" : "border-gray-200 opacity-60"
+                          }`}
+                        >
+                          {task5OptionImageUrl(task.content, opt) ? (
+                            <img
+                              src={task5OptionImageUrl(task.content, opt)}
+                              alt={option.label}
+                              className={speakingImageClass}
+                            />
+                          ) : (
+                            <div className="aspect-square bg-gray-100 flex items-center justify-center text-gray-600 text-sm">
+                              🖼 {option?.label}
+                            </div>
+                          )}
+                          <div className="p-3">
+                            <p className="font-bold text-gray-800 text-sm">{option?.label}</p>
+                            {isSelected && Array.isArray(option?.facts) && option.facts.length > 0 && (
+                              <div className="mt-1 space-y-0.5">
+                                {option.facts.slice(0, 5).map((fact: string, i: number) => (
+                                  <p key={i} className="text-[11px] text-gray-600">• {fact}</p>
+                                ))}
+                              </div>
+                            )}
+                            {isSelected && <p className="text-xs text-purple-600 font-bold mt-2">✓ Your choice</p>}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
+                  {task.content.prompt && (
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <p className="text-xs font-bold text-purple-700 mb-1">Instructions</p>
+                      <p className="text-sm text-gray-800">{task.content.prompt}</p>
+                    </div>
+                  )}
+                  {task.content.person_to_persuade && (
+                    <div className="bg-blue-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-700">
+                        <span className="font-bold">Person to persuade:</span> {task.content.person_to_persuade}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               {taskNum === 6 && selectedOption && task.content.option_a && (
@@ -339,7 +555,12 @@ function SpeakingContent() {
                   <p className="text-sm text-gray-700">{selectedOption === "A" ? task.content.option_a?.person : task.content.option_b?.person}</p>
                 </div>
               )}
-              {task.content.prompt && <p className="text-sm font-medium text-gray-800">{task.content.prompt}</p>}
+              {!isTask5 && learnerPrompt && (
+                <div className="bg-purple-50 rounded-lg p-4 mt-3">
+                  <p className="text-xs font-bold text-purple-700 mb-1">Instructions</p>
+                  <p className="text-sm text-gray-800">{learnerPrompt}</p>
+                </div>
+              )}
               {task.content.tips?.length > 0 && (
                 <div className="bg-yellow-50 rounded-lg p-4 mt-3">
                   <p className="text-xs font-bold text-yellow-700 mb-2">💡 Tips</p>
@@ -347,27 +568,6 @@ function SpeakingContent() {
                 </div>
               )}
             </div>
-            {!showEvalBtn && <div className="bg-red-50 border-2 border-red-200 rounded-xl p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse" />
-                  <p className="text-red-600 font-bold">Recording...</p>
-                  <span className="text-red-600 font-mono font-bold">{recTimeLeft}s</span>
-                </div>
-                <button onClick={stopRecording} className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-5 rounded-xl transition text-sm">⏹ Stop</button>
-              </div>
-              <div className="w-full bg-red-200 rounded-full h-2">
-                <div className="bg-red-500 h-2 rounded-full transition-all" style={{width:`${(recTimeLeft/(task.content.speaking_time_seconds||60))*100}%`}} />
-              </div>
-              <p className="text-xs text-red-400 mt-2">Speak clearly • Click Stop when finished or wait for timer</p>
-            </div>}
-            {showEvalBtn && (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-3">
-                <p className="text-green-700 font-bold text-center">✅ Recording complete</p>
-                <button onClick={goToEvaluation} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition">Get Evaluation →</button>
-
-              </div>
-            )}
           </>
         )}
 
@@ -379,12 +579,12 @@ function SpeakingContent() {
                 <p className="text-xs font-bold text-purple-600 uppercase mb-1">Situation</p>
                 <p className="text-gray-800">{task.content.situation}</p>
               </div>
-              {task.content.prompt && <p className="text-sm font-medium text-gray-800">{task.content.prompt}</p>}
-            </div>
-            <div className="bg-green-50 border border-green-200 rounded-xl p-5 space-y-3">
-              <p className="text-green-700 font-bold text-center">✅ Recording complete</p>
-              <button onClick={goToEvaluation} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition">Get Evaluation →</button>
-              <button onClick={resetTask} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2 transition">🔄 Re-record</button>
+              {learnerPrompt && (
+                <div className="bg-purple-50 rounded-lg p-4 mt-3">
+                  <p className="text-xs font-bold text-purple-700 mb-1">Instructions</p>
+                  <p className="text-sm text-gray-800">{learnerPrompt}</p>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -394,7 +594,7 @@ function SpeakingContent() {
           <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
             <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-800 mb-2">Processing Your Response</h3>
-            <p className="text-gray-500">Transcribing and evaluating with AI...</p>
+            <p className="text-gray-600">Transcribing and evaluating with AI...</p>
           </div>
         )}
 
@@ -402,18 +602,18 @@ function SpeakingContent() {
         {phase === "done" && evaluation && (
           <div className="space-y-4">
             <div className="bg-white border border-gray-200 rounded-xl p-4">
-              <p className="text-xs font-bold text-gray-500 mb-2">📝 YOUR RESPONSE</p>
+              <p className="text-xs font-bold text-gray-600 mb-2">📝 YOUR RESPONSE</p>
               <p className="text-gray-700 italic text-sm">"{transcript}"</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
               <p className={`text-7xl font-bold ${getBandColor(evaluation.overall_band)}`}>{evaluation.overall_band}</p>
-              <p className="text-gray-400 text-sm mt-1">Overall Band Score / 12</p>
+              <p className="text-gray-600 text-sm mt-1">Overall Band Score / 12</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               {Object.entries(evaluation.subscores || {}).map(([key, val]: any) => (
                 <div key={key} className="bg-white border border-gray-200 rounded-xl p-4">
-                  <p className="text-xs text-gray-500 capitalize mb-1">{key.replace(/_/g," ")}</p>
-                  <p className={`text-2xl font-bold ${getBandColor(val)}`}>{val}<span className="text-gray-400 text-sm"> /12</span></p>
+                  <p className="text-xs text-gray-600 capitalize mb-1">{key.replace(/_/g," ")}</p>
+                  <p className={`text-2xl font-bold ${getBandColor(val)}`}>{val}<span className="text-gray-600 text-sm"> /12</span></p>
                 </div>
               ))}
             </div>
@@ -435,11 +635,108 @@ function SpeakingContent() {
             </div>
             <div className="flex gap-3">
               <button onClick={resetTask} className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition">🔄 Try Again</button>
-              <Link href="/practice/speaking" className="flex-1 text-center bg-white border border-gray-200 text-gray-700 font-semibold py-3 rounded-xl hover:bg-gray-50 transition">← Back to Library</Link>
+              <Link href={listReturnHref} className="flex-1 text-center bg-white border border-gray-200 text-gray-700 font-semibold py-3 rounded-xl hover:bg-gray-50 transition">← Back to Library</Link>
             </div>
           </div>
         )}
+          </div>
 
+          {/* RIGHT: Controls (Task 5 = 1/3 width) */}
+          <div
+            className={`overflow-y-auto bg-white border-t lg:border-t-0 lg:border-l border-gray-200 px-6 py-6 lg:px-8 lg:py-8 min-h-0 ${
+              isTask5 ? "lg:col-span-1" : ""
+            }`}
+          >
+            <div className="space-y-4">
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                <p className="text-xs font-bold text-purple-700 mb-1">Status</p>
+                <p className="text-sm text-gray-700">
+                  Phase: <span className="font-semibold">{phase}</span>
+                </p>
+                {phase === "preparing" && (
+                  <p className="text-sm text-gray-700 mt-1">
+                    Prep time left: <span className="font-mono font-bold">{prepTimeLeft}s</span>
+                  </p>
+                )}
+                {phase === "recording" && (
+                  <p className="text-sm text-gray-700 mt-1">
+                    Recording time left: <span className="font-mono font-bold">{recTimeLeft}s</span>
+                  </p>
+                )}
+              </div>
+
+              {phase === "preparing" && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-blue-700 mb-2">Preparation</p>
+                  <div className="w-full bg-blue-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded-full transition-all"
+                      style={{ width: `${(prepTimeLeft / (task.content.preparation_time_seconds || 30)) * 100}%` }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      const requiresChoice = taskNum === 5 || taskNum === 6;
+                      if (requiresChoice && !selectedOptionRef.current) {
+                        setError("Please choose Option A or Option B before recording.");
+                        return;
+                      }
+                      if (timerRef.current) clearInterval(timerRef.current);
+                      void startRecording();
+                    }}
+                    className="mt-3 w-full text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl transition"
+                  >
+                    Skip → Start Recording
+                  </button>
+                </div>
+              )}
+
+              {phase === "recording" && !showEvalBtn && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse" />
+                      <p className="text-red-600 font-bold">Recording...</p>
+                    </div>
+                    <button
+                      onClick={stopRecording}
+                      className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-5 rounded-xl transition text-sm"
+                    >
+                      ⏹ Stop
+                    </button>
+                  </div>
+                  <div className="w-full bg-red-200 rounded-full h-2">
+                    <div
+                      className="bg-red-500 h-2 rounded-full transition-all"
+                      style={{ width: `${(recTimeLeft / (task.content.speaking_time_seconds || 60)) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {phase === "recording" && showEvalBtn && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-3">
+                  <p className="text-green-700 font-bold text-center">✅ Recording complete</p>
+                  <button
+                    onClick={goToEvaluation}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition"
+                  >
+                    Get Evaluation →
+                  </button>
+                </div>
+              )}
+
+              {(phase === "stopped" || phase === "done") && (
+                <button
+                  onClick={resetTask}
+                  className="w-full border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl transition"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

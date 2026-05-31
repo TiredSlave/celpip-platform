@@ -1,0 +1,23 @@
+
+> celpip-platform@0.1.0 build
+> next build
+
+▲ Next.js 16.2.4 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 14.0s
+  Running TypeScript ...
+Failed to type check.
+
+./app/api/admin/speaking/generate-pair/route.ts:234:13
+Type error: Property 'image_url' does not exist on type '{ prompt: string; task_number: number; task_type: string; preparation_time_seconds: number; speaking_time_seconds: number; tips: string[]; }'.
+
+  [90m232 |[0m       };
+  [90m233 |[0m
+[31m[1m>[0m [90m234 |[0m       task4.image_url = imageUrl;
+  [90m    |[0m             [31m[1m^[0m
+  [90m235 |[0m       task4.scene_profile = scene.setting;
+  [90m236 |[0m       task4.image_grounded = [33mBoolean[0m(aligned);
+  [90m237 |[0m       task4.describe_focus = focalPoints;
+Next.js build worker exited with code: 1 and signal: null

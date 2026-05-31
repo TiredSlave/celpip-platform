@@ -21,6 +21,7 @@ const partConfig: Record<string, {
   questions: number;
   speakers: string;
   audioLength: string;
+  answerTimeSeconds: number;
   description: string;
   difficulty: string;
   vocabulary: string;
@@ -30,7 +31,8 @@ const partConfig: Record<string, {
   "Problem Solving": {
     questions: 8,
     speakers: "2 speakers",
-    audioLength: "1.5-2.5 minutes",
+    audioLength: "3 segments, 45-75 seconds each",
+    answerTimeSeconds: 30,
     description: "Two people discussing and solving an everyday problem",
     difficulty: "MEDIUM — moderate vocabulary, some inference required",
     vocabulary: "everyday conversational English, some idioms acceptable",
@@ -41,6 +43,7 @@ const partConfig: Record<string, {
     questions: 5,
     speakers: "2 speakers",
     audioLength: "1-1.5 minutes",
+    answerTimeSeconds: 30,
     description: "Short casual conversation about everyday topics",
     difficulty: "EASIEST — simple vocabulary, literal meaning, no inference needed",
     vocabulary: "basic everyday words only, no idioms, short simple sentences",
@@ -50,7 +53,8 @@ const partConfig: Record<string, {
   "Listening for Information": {
     questions: 6,
     speakers: "2 speakers",
-    audioLength: "1.5-2 minutes",
+    audioLength: "2.0-2.5 minutes",
+    answerTimeSeconds: 30,
     description: "One person giving information or instructions to another",
     difficulty: "EASY-MEDIUM — clear information, mostly literal",
     vocabulary: "clear instructional language, some specific terms explained in context",
@@ -60,7 +64,8 @@ const partConfig: Record<string, {
   "News Item": {
     questions: 5,
     speakers: "1 speaker (news reporter)",
-    audioLength: "1-1.5 minutes",
+    audioLength: "1.5-2 minutes",
+    answerTimeSeconds: 180,
     description: "A formal news-style report on a Canadian community topic",
     difficulty: "MEDIUM — formal vocabulary, some inference, facts to remember",
     vocabulary: "formal news language, some specific nouns and statistics",
@@ -70,7 +75,8 @@ const partConfig: Record<string, {
   "Discussion": {
     questions: 8,
     speakers: "3 speakers (Host + 2 guests)",
-    audioLength: "2.5-3.5 minutes",
+    audioLength: "1.5-2 minutes",
+    answerTimeSeconds: 240,
     description: "Multiple people discussing different viewpoints on a topic",
     difficulty: "HARD — multiple speakers, different opinions, inference required",
     vocabulary: "wide range including abstract concepts, opinions, discourse markers",
@@ -80,7 +86,8 @@ const partConfig: Record<string, {
   "Viewpoints": {
     questions: 6,
     speakers: "1-2 speakers",
-    audioLength: "2-3 minutes",
+    audioLength: "2.5-3 minutes",
+    answerTimeSeconds: 270,
     description: "Speaker presenting and defending a viewpoint with evidence",
     difficulty: "HARDEST — complex arguments, implied meaning, requires inference",
     vocabulary: "advanced vocabulary, academic-style language, evidence and examples",
@@ -88,6 +95,49 @@ const partConfig: Record<string, {
     speechStyle: "confident persuasive speaker, structured argument with evidence"
   }
 };
+
+type GeneratedListeningTask = {
+  listening_type?: string;
+  part_description?: string;
+  audio_length?: string;
+  answer_time_seconds?: number;
+  topic?: string;
+  title?: string;
+  dialogue?: { speaker: string; text: string; section?: number }[];
+  questions?: unknown[];
+  audio_url?: string;
+};
+
+/** Ensure topic + title exist for admin library and practice UI. */
+function normalizeListeningTask(
+  task: GeneratedListeningTask,
+  listeningType: string,
+  config: (typeof partConfig)[string],
+): GeneratedListeningTask {
+  const trimmedTopic = task.topic?.trim();
+  const trimmedTitle = task.title?.trim();
+
+  if (trimmedTopic) {
+    task.topic = trimmedTopic;
+  } else if (trimmedTitle) {
+    task.topic = trimmedTitle;
+  } else {
+    task.topic = `${listeningType} — Canadian everyday scenario`;
+  }
+
+  if (trimmedTitle) {
+    task.title = trimmedTitle;
+  } else {
+    task.title = task.topic;
+  }
+
+  if (!task.listening_type) task.listening_type = listeningType;
+  if (!task.part_description) task.part_description = config.description;
+  if (!task.audio_length) task.audio_length = config.audioLength;
+  if (task.answer_time_seconds == null) task.answer_time_seconds = config.answerTimeSeconds;
+
+  return task;
+}
 
 // Assign Google TTS voice based on speaker index and part type
 function assignVoice(speakerIndex: number, partType: string): string {
@@ -186,11 +236,12 @@ export async function POST(request: Request) {
       All 3 sections share the same two speakers and overall topic, but each section is a self-contained conversation clip.
 
       Structure:
-      - section_1: 5-6 exchanges. The problem is first introduced. Questions 1-3 must be answerable ONLY from this section.
-      - section_2: 5-6 exchanges. The problem is discussed further, options explored. Questions 4-6 must be answerable ONLY from this section.
-      - section_3: 4-5 exchanges. A solution is reached. Questions 7-8 must be answerable ONLY from this section.
+      - section_1: 45-75 seconds of audio. Introduce the two characters, clearly define the main problem, and begin the initial discussion. Questions 1-3 must be answerable ONLY from this section.
+      - section_2: 45-75 seconds of audio. Develop the middle of the conversation: details, options, complications, or obstacles related to the problem. Questions 4-6 must be answerable ONLY from this section.
+      - section_3: 45-75 seconds of audio. Conclude the conversation with a compromise, final decision, clear next step, or solution. Questions 7-8 must be answerable ONLY from this section.
 
       CRITICAL RULES:
+      - Each section should be about 90-150 spoken words, enough for 45-75 seconds at natural TTS speed
       - Each section's dialogue must contain ALL information needed to answer its questions
       - NO question should require listening to another section to answer
       - Each section should make sense independently as a standalone audio clip
@@ -203,17 +254,18 @@ export async function POST(request: Request) {
       VERIFY: each question's answer must exist explicitly in its section's dialogue lines only.`;
     }else if (listeningType === "News Item") {
       dialogueInstruction = `Create a news monologue with ONE speaker named "Reporter".
-Use 8-12 sentences. Formal Canadian broadcast news style. Include specific names, numbers, dates.`;
+Target audio length: 1.5-2 minutes, about 190-260 spoken words. Formal Canadian broadcast news style. Include specific names, numbers, dates.`;
     } else if (listeningType === "Viewpoints") {
       dialogueInstruction = `Create a persuasive monologue with ONE speaker named "Speaker".
-Use 10-14 sentences. Structured argument with evidence and examples.`;
+Target audio length: 2.5-3 minutes, about 330-420 spoken words. Structured argument with evidence and examples.`;
     } else if (listeningType === "Discussion") {
       dialogueInstruction = `Create a discussion with exactly 3 speakers: "Host", "Alex", "Maria".
-Use 12-14 exchanges only (keep total under 3 minutes of speech = ~400 words).
+Target audio length: 1.5-2 minutes, about 190-260 spoken words total.
 Host asks 3-4 short questions. Alex and Maria each give 2-3 responses of 1-2 sentences each.
 Keep each response SHORT — maximum 2 sentences per turn.`;
     } else {
       dialogueInstruction = `Create a natural conversation between 2 speakers named "Sarah" and "David".
+Target audio length: ${listeningType === "Listening for Information" ? "2.0-2.5 minutes, about 260-340 spoken words" : config.audioLength}.
 Use ${listeningType === "Daily Life Conversation" ? "8-10" : "12-16"} exchanges.
 Include natural filler words (um, well, actually), contractions, and short reactions.`;
     }
@@ -236,15 +288,22 @@ SPEAKERS: ${config.speakers}
 ${dialogueInstruction}
 ${sectionInstruction}
 
+TOPIC RULES (required):
+- "topic" = a short, specific scenario label for the admin task library (5–14 words).
+  Examples: "Booking a vet appointment by phone", "Neighbours discussing a parking dispute".
+- "title" = a slightly more engaging headline shown to students (can match topic or expand it).
+- The dialogue and all questions MUST match this topic — do not use a generic placeholder.
+
 Return ONLY raw JSON:
 {
   "listening_type": "${listeningType}",
   "part_description": "${config.description}",
   "audio_length": "${config.audioLength}",
-  "title": "engaging title for this passage",
+  "answer_time_seconds": ${config.answerTimeSeconds},
+  "topic": "specific short scenario label",
+  "title": "engaging student-facing headline for this passage",
   "dialogue": [
     {"speaker": "Speaker Name", "text": "what they say naturally", "section": 1}
-  ],
   ],
   "questions": [
     {
@@ -272,22 +331,31 @@ Use realistic Canadian names, places, and situations.`
     const block = response.content[0];
     const text = block.type === "text" ? block.text : "";
     const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    const task = JSON.parse(cleaned);
+    const task = normalizeListeningTask(
+      JSON.parse(cleaned) as GeneratedListeningTask,
+      listeningType,
+      config,
+    );
 
     // Step 2: Build speaker map
+    const dialogue = task.dialogue ?? [];
+    if (dialogue.length === 0) {
+      return NextResponse.json({ error: "Generated task is missing dialogue lines." }, { status: 422 });
+    }
+
     const speakerMap: Record<string, number> = {};
-    task.dialogue.forEach((line: { speaker: string; text: string }) => {
+    dialogue.forEach((line: { speaker: string; text: string }) => {
       if (!(line.speaker in speakerMap)) {
         speakerMap[line.speaker] = Object.keys(speakerMap).length;
       }
     });
 
     // Step 3: Generate audio for each dialogue line
-    console.log(`Generating audio for ${task.dialogue.length} lines...`);
+    console.log(`Generating audio for ${dialogue.length} lines...`);
     const audioBuffers: Buffer[] = [];
     const silence = Buffer.alloc(8000); // ~0.5s silence between lines
 
-    for (const line of task.dialogue) {
+    for (const line of dialogue) {
       const speakerIndex = speakerMap[line.speaker] ?? 0;
       const voice = assignVoice(speakerIndex, listeningType);
       const buffer = await generateLineAudio(line.text, voice);

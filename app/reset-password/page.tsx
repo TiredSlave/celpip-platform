@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "../components/BrandLogo";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -42,9 +43,9 @@ export default function ResetPasswordPage() {
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white rounded-xl shadow p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-blue-700">CELPIP Practice</h1>
-          <p className="text-gray-500 mt-2">Set your new password</p>
+        <div className="flex flex-col items-center mb-8">
+          <BrandLogo size="lg" />
+          <p className="text-gray-600 mt-4">Set your new password</p>
         </div>
 
         {error && (

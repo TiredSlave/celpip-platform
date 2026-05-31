@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { READING_PARTS, readingPartFilterLabel } from "../lib/reading-task-types";
 
 const SECTIONS = [
   {
@@ -20,13 +21,20 @@ const SECTIONS = [
     icon: "📖",
     color: { bg: "bg-green-50", border: "border-green-200", badge: "bg-green-100 text-green-700", btn: "bg-green-600 hover:bg-green-700", dot: "bg-green-400" },
     description: "Read passages and answer multiple choice questions across 4 parts.",
-    time: "43 minutes total",
-    tasks: [
-      { label: "Part 1 — Correspondence", description: "Read emails or letters and answer comprehension questions.", time: "11 min", href: "/reading?part=0" },
-      { label: "Part 2 — Apply Information", description: "Read a document and apply the information to complete tasks.", time: "9 min", href: "/reading?part=1" },
-      { label: "Part 3 — Reading for Information", description: "Read a passage and find specific information.", time: "10 min", href: "/reading?part=2" },
-      { label: "Part 4 — Reading for Viewpoints", description: "Read multiple viewpoints and answer opinion-based questions.", time: "13 min", href: "/reading?part=3" },
-    ],
+    time: "55-60 minutes total",
+    tasks: READING_PARTS.map(part => ({
+      label: readingPartFilterLabel(part),
+      description:
+        part.key === "task 1"
+          ? "Read emails or letters and answer comprehension questions."
+          : part.key === "task 2"
+            ? "Read a document and apply the information to complete tasks."
+            : part.key === "task 3"
+              ? "Read a passage and find specific information."
+              : "Read multiple viewpoints and answer opinion-based questions.",
+      time: `${part.timeMinutes} min`,
+      href: `/practice/reading?filter=${encodeURIComponent(part.key)}`,
+    })),
   },
   {
     key: "speaking",
@@ -72,7 +80,7 @@ export default function PracticePage() {
         {/* Header */}
         <div className="mb-10">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Practice</h1>
-          <p className="text-gray-500">Choose a section and task to start practicing. Each task uses real CELPIP format with AI feedback.</p>
+          <p className="text-gray-600">Choose a section and task to start practicing. Each task uses real CELPIP format with AI feedback.</p>
         </div>
 
         {/* Sections */}
@@ -85,7 +93,7 @@ export default function PracticePage() {
                 <span className="text-2xl">{section.icon}</span>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">{section.label}</h2>
-                  <p className="text-sm text-gray-500">{section.description} • {section.time}</p>
+                  <p className="text-sm text-gray-600">{section.description} • {section.time}</p>
                 </div>
               </div>
 
@@ -101,12 +109,12 @@ export default function PracticePage() {
                       <span className={`text-xs font-bold px-2 py-1 rounded-full ${section.color.badge}`}>
                         {section.label} {section.key === "writing" ? `Task ${i + 1}` : section.key === "speaking" ? `Task ${i + 1}` : `Part ${i + 1}`}
                       </span>
-                      <span className="text-xs text-gray-400">{task.time}</span>
+                      <span className="text-xs text-gray-600">{task.time}</span>
                     </div>
                     <h3 className="font-bold text-gray-800 text-sm mb-2 group-hover:text-blue-600 transition">
                       {task.label}
                     </h3>
-                    <p className="text-xs text-gray-500 leading-relaxed mb-4">
+                    <p className="text-xs text-gray-600 leading-relaxed mb-4">
                       {task.description}
                     </p>
                     <div className={`flex items-center gap-2 text-xs font-semibold text-white ${section.color.btn} px-3 py-1.5 rounded-lg w-fit transition`}>

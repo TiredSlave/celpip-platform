@@ -1,8 +1,12 @@
 "use client";
 import { useEffect, useState, useRef, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
+import { storeResultsReturn, taskReturnHref } from "../../../lib/practice-navigation";
+import { navigatePracticeTask } from "../../../lib/practice-task-nav";
+import { usePracticeTaskSiblings } from "../../../lib/use-practice-task-siblings";
+import { PracticeTaskTypeDropdown } from "../../../components/PracticeTaskTypeDropdown";
 
 type WritingTaskContent = {
   scenario?: string;
@@ -36,8 +40,10 @@ const WRITING_PARTS = [
 ];
 
 function WritingContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const taskId = searchParams.get("taskId");
+  const listReturnHref = taskReturnHref(searchParams, "/practice/writing");
   const fromLibrary = Boolean(taskId);
   const [tasks, setTasks] = useState<WritingTask[]>([]);
   const [currentPartIndex, setCurrentPartIndex] = useState(0);
@@ -52,8 +58,13 @@ function WritingContent() {
   /** Writing Task 2: candidate must pick A or B before the response is evaluated as that choice */
   const [task2Choice, setTask2Choice] = useState<"A" | "B" | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const taskSiblings = usePracticeTaskSiblings(
+    "writing",
+    taskId,
+    currentTask?.task_type,
+  );
 
-  useEffect(() => { loadTasks(); }, []);
+  useEffect(() => { void loadTasks(); }, [taskId]);
 
   useEffect(() => {
     if (tasks.length > 0) {
@@ -91,7 +102,10 @@ function WritingContent() {
       const { data } = await supabase.from("admin_tasks").select("*").eq("id", taskId).single();
       if (data) {
         setCurrentTask(data as WritingTask);
+        setResponse("");
         setTask2Choice(null);
+        setSubmitted(false);
+        setSubmitError(null);
         const idx = WRITING_PARTS.findIndex(p => p.key === (data as WritingTask).task_type);
         if (idx >= 0) setCurrentPartIndex(idx);
       }
@@ -102,9 +116,9 @@ function WritingContent() {
       .from("admin_tasks")
       .select("*")
       .in("task_type", WRITING_PARTS.map(p => p.key))
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
     const latest: Record<string, WritingTask> = {};
-    (data || []).forEach((t: WritingTask) => { if (!latest[t.task_type]) latest[t.task_type] = t; });
+    (data || []).forEach((t: WritingTask) => { latest[t.task_type] = t; });
     setTasks(Object.values(latest));
     setLoading(false);
   }
@@ -168,7 +182,8 @@ function WritingContent() {
           feedback: data,
         }),
       );
-      window.location.href = "/practice/results";
+      storeResultsReturn(listReturnHref);
+      router.push("/practice/results");
     } catch {
       setSubmitError("Could not evaluate. Please try again.");
     }
@@ -188,7 +203,7 @@ function WritingContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-500">Loading writing tasks...</p>
+          <p className="text-gray-600">Loading writing tasks...</p>
         </div>
       </div>
     );
@@ -200,9 +215,19 @@ function WritingContent() {
       {/* Top bar — aligned with reading task layout */}
       <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-3 min-w-0">
-          <Link href="/practice/writing" className="text-sm text-blue-600 hover:underline shrink-0 hidden sm:inline">← Library</Link>
-          <span className="text-lg font-bold text-gray-800 truncate">Writing — {currentPart.label}</span>
-          <span className="text-sm text-gray-500 truncate hidden md:inline">{currentPart.title}</span>
+          <Link href={listReturnHref} className="text-sm text-blue-600 hover:underline shrink-0 hidden sm:inline">← Library</Link>
+          <PracticeTaskTypeDropdown
+            section="writing"
+            currentLabel={`Writing — ${currentPart.label}`}
+            currentTaskType={currentTask?.task_type}
+            className="truncate"
+          />
+          <span className="text-sm text-gray-600 truncate hidden md:inline">{currentPart.title}</span>
+          {fromLibrary && taskSiblings.total > 0 && (
+            <span className="text-xs text-gray-500 shrink-0">
+              {taskSiblings.position} / {taskSiblings.total}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -231,25 +256,48 @@ function WritingContent() {
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <button type="button" onClick={() => setCurrentPartIndex(i => Math.max(0, i - 1))} disabled={fromLibrary || currentPartIndex === 0}
-            className="px-2 sm:px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 disabled:opacity-30 transition">
-            PREV
-          </button>
-          <div className="flex gap-1">
-            {WRITING_PARTS.map((p, i) => (
-              <button key={p.key} type="button" onClick={() => setCurrentPartIndex(i)} disabled={fromLibrary}
-                className={`w-8 h-8 rounded-lg text-xs font-bold transition disabled:opacity-40 ${
-                  i === currentPartIndex ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}>
-                {i + 1}
+          {fromLibrary ? (
+            <>
+              <button
+                type="button"
+                onClick={() => taskSiblings.prevId && navigatePracticeTask(router, "writing", taskSiblings.prevId, listReturnHref)}
+                disabled={!taskSiblings.prevId}
+                className="px-2 sm:px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 disabled:opacity-30 transition"
+              >
+                PREV
               </button>
-            ))}
-          </div>
-          <button type="button" onClick={() => setCurrentPartIndex(i => Math.min(WRITING_PARTS.length - 1, i + 1))}
-            disabled={fromLibrary || currentPartIndex === WRITING_PARTS.length - 1}
-            className="px-2 sm:px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 disabled:opacity-30 transition">
-            NEXT
-          </button>
+              <button
+                type="button"
+                onClick={() => taskSiblings.nextId && navigatePracticeTask(router, "writing", taskSiblings.nextId, listReturnHref)}
+                disabled={!taskSiblings.nextId}
+                className="px-2 sm:px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 disabled:opacity-30 transition"
+              >
+                NEXT
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={() => setCurrentPartIndex(i => Math.max(0, i - 1))} disabled={currentPartIndex === 0}
+                className="px-2 sm:px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 disabled:opacity-30 transition">
+                PREV
+              </button>
+              <div className="flex gap-1">
+                {WRITING_PARTS.map((p, i) => (
+                  <button key={p.key} type="button" onClick={() => setCurrentPartIndex(i)}
+                    className={`w-8 h-8 rounded-lg text-xs font-bold transition ${
+                      i === currentPartIndex ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}>
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+              <button type="button" onClick={() => setCurrentPartIndex(i => Math.min(WRITING_PARTS.length - 1, i + 1))}
+                disabled={currentPartIndex === WRITING_PARTS.length - 1}
+                className="px-2 sm:px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 disabled:opacity-30 transition">
+                NEXT
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -264,8 +312,8 @@ function WritingContent() {
           <div className="text-center bg-white rounded-xl shadow p-10 max-w-md">
             <div className="text-5xl mb-4">📭</div>
             <h2 className="text-xl font-bold text-gray-800 mb-2">No task available</h2>
-            <p className="text-gray-500 text-sm">No <strong>{currentPart.title}</strong> task generated yet.</p>
-            <Link href="/practice/writing" className="mt-4 inline-block text-sm text-blue-600 hover:underline">← Back to writing library</Link>
+            <p className="text-gray-600 text-sm">No <strong>{currentPart.title}</strong> task generated yet.</p>
+            <Link href={listReturnHref} className="mt-4 inline-block text-sm text-blue-600 hover:underline">← Back to writing library</Link>
           </div>
         </div>
       ) : (
@@ -282,7 +330,7 @@ function WritingContent() {
                 <div className="space-y-3">
                   {currentTask.content.bullet_points?.map((point, i) => (
                     <div key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                      <span className="text-gray-400 mt-0.5">•</span>
+                      <span className="text-gray-600 mt-0.5">•</span>
                       <span>{point}</span>
                     </div>
                   ))}
@@ -314,7 +362,7 @@ function WritingContent() {
                   </div>
                 )}
                 <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-2">Your choice (required first)</h3>
-                <p className="text-xs text-gray-500 mb-3">Select the option you will support in your writing. The AI will score your answer against this choice.</p>
+                <p className="text-xs text-gray-600 mb-3">Select the option you will support in your writing. The AI will score your answer against this choice.</p>
                 <div className="grid grid-cols-1 gap-3 mb-6">
                   {task2OptionA && (
                     <button
@@ -360,7 +408,7 @@ function WritingContent() {
           <div className="w-1/2 overflow-y-auto bg-gray-50 p-8 flex flex-col">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
               <h2 className="text-xl font-bold text-gray-900">Write your response:</h2>
-              <span className={`text-sm font-semibold ${isOverLimit ? "text-red-600" : "text-gray-500"}`}>
+              <span className={`text-sm font-semibold ${isOverLimit ? "text-red-600" : "text-gray-600"}`}>
                 Words: {wordCount} / {wordLimit}
               </span>
             </div>

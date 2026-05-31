@@ -1,0 +1,34 @@
+# CELPIP Lib
+
+> https://celpiplib.com — AI-powered CELPIP practice library for Writing, Reading, Listening, and Speaking. Timed tasks, AI feedback, free templates, and mock tests for Canadian English exam preparation.
+
+## What we offer
+
+- CELPIP Writing practice: Task 1 (email) and Task 2 (survey response) with timed prompts and AI band-style feedback
+- CELPIP Reading practice: 4 parts — correspondence, apply information, reading for information, viewpoints
+- CELPIP Listening practice: 6 parts with generated audio, countdown answer windows, and transcript review
+- CELPIP Speaking practice: all 8 tasks including picture description, predictions, compare options, and unusual situations
+- Free Writing & Speaking template guides with structure, scoring tips, and examples
+- Mock tests by skill (Reading, Writing, Listening, Speaking)
+- Vocabulary saving from reading and listening passages
+
+## Primary pages
+
+- Home: https://celpiplib.com/
+- Practice hub: https://celpiplib.com/practice
+- Writing library: https://celpiplib.com/practice/writing
+- Reading library: https://celpiplib.com/practice/reading
+- Listening library: https://celpiplib.com/practice/listening
+- Speaking library: https://celpiplib.com/practice/speaking
+- Template guides: https://celpiplib.com/templates
+- Mock tests: https://celpiplib.com/mock-test
+- Sign up: https://celpiplib.com/signup
+- Log in: https://celpiplib.com/login
+
+## Disclaimer
+
+Independent practice platform — not affiliated with Paragon Testing Enterprises or the official CELPIP test.
+
+## Sitemap
+
+https://celpiplib.com/sitemap.xml

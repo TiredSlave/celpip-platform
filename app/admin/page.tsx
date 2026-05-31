@@ -71,7 +71,7 @@ export default function AdminDashboard() {
   }, []);
 
   if (loading) {
-    return <p className="text-gray-500">Loading stats...</p>;
+    return <p className="text-gray-600">Loading stats...</p>;
   }
 
   const statCards = [
@@ -98,7 +98,7 @@ export default function AdminDashboard() {
               </span>
             </div>
             <p className="text-4xl font-bold text-gray-800">{card.value}</p>
-            <p className="text-gray-400 text-sm mt-1">{card.label}</p>
+            <p className="text-gray-600 text-sm mt-1">{card.label}</p>
           </div>
         ))}
       </div>
@@ -113,7 +113,7 @@ export default function AdminDashboard() {
         </div>
         <table className="w-full">
           <thead>
-            <tr className="text-left text-gray-400 text-sm border-b">
+            <tr className="text-left text-gray-600 text-sm border-b">
               <th className="pb-3">Email</th>
               <th className="pb-3">Type</th>
               <th className="pb-3">Joined</th>
@@ -132,7 +132,7 @@ export default function AdminDashboard() {
                     {user.user_type || "free"}
                   </span>
                 </td>
-                <td className="py-3 text-gray-400 text-sm">
+                <td className="py-3 text-gray-600 text-sm">
                   {new Date(user.created_at).toLocaleDateString()}
                 </td>
               </tr>

@@ -22,7 +22,8 @@ export async function POST(request: Request) {
 Return a JSON object with exactly these keys:
 {
   "listening_type": "${listeningType}",
-  "title": "title of the listening passage",
+  "topic": "short specific scenario label (5-14 words)",
+  "title": "engaging student-facing headline",
   "dialogue": [
     {"speaker": "Person A", "text": "what they say"},
     {"speaker": "Person B", "text": "what they say"}

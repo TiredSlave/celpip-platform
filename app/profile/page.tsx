@@ -128,7 +128,7 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-500">Loading your profile...</p>
+        <p className="text-gray-600">Loading your profile...</p>
       </main>
     );
   }
@@ -139,7 +139,7 @@ export default function ProfilePage() {
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold">My Profile</h1>
-            <p className="text-indigo-200 text-sm mt-1">{user?.email}</p>
+            <p className="text-indigo-100 text-sm mt-1">{user?.email}</p>
           </div>
           <a
             href="/dashboard"
@@ -166,7 +166,7 @@ export default function ProfilePage() {
           <h2 className="text-xl font-bold text-gray-800 mb-4">Goal Progress</h2>
 
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-gray-500">Progress to Band {targetBand}</span>
+            <span className="text-sm text-gray-600">Progress to Band {targetBand}</span>
             <span className="text-sm font-bold text-indigo-600">{progressPercent}%</span>
           </div>
 
@@ -185,19 +185,19 @@ export default function ProfilePage() {
 
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-400 mb-1">Latest Band</p>
-              <p className={`text-2xl font-bold ${getLatestBand() ? getBandColor(getLatestBand()!) : "text-gray-400"}`}>
+              <p className="text-xs text-gray-700 mb-1">Latest Band</p>
+              <p className={`text-2xl font-bold ${getLatestBand() ? getBandColor(getLatestBand()!) : "text-gray-600"}`}>
                 {getLatestBand() || "—"}
               </p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-400 mb-1">Target Band</p>
+              <p className="text-xs text-gray-700 mb-1">Target Band</p>
               <p className="text-2xl font-bold text-indigo-600">{targetBand}</p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-400 mb-1">Days Left</p>
+              <p className="text-xs text-gray-700 mb-1">Days Left</p>
               <p className={`text-2xl font-bold ${
-                daysUntilTest === null ? "text-gray-400" :
+                daysUntilTest === null ? "text-gray-600" :
                 daysUntilTest < 7 ? "text-red-500" :
                 daysUntilTest < 30 ? "text-yellow-500" : "text-green-600"
               }`}>
@@ -245,9 +245,9 @@ export default function ProfilePage() {
               type="email"
               value={user?.email || ""}
               disabled
-              className="w-full p-3 border border-gray-100 rounded-lg bg-gray-50 text-gray-400"
+              className="w-full p-3 border border-gray-100 rounded-lg bg-gray-50 text-gray-600"
             />
-            <p className="text-xs text-gray-400 mt-1">Email cannot be changed</p>
+            <p className="text-xs text-gray-600 mt-1">Email cannot be changed</p>
           </div>
 
           <div className="mb-4">
@@ -281,7 +281,7 @@ export default function ProfilePage() {
               onChange={e => setTestDate(e.target.value)}
               className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-gray-600 mt-1">
               Set your CELPIP test date to track countdown
             </p>
           </div>
@@ -303,24 +303,24 @@ export default function ProfilePage() {
               <p className="text-3xl font-bold text-blue-600">
                 {attempts.filter(a => a.task_type.includes("Writing")).length}
               </p>
-              <p className="text-gray-500 text-sm mt-1">Writing Sessions</p>
+              <p className="text-gray-600 text-sm mt-1">Writing Sessions</p>
             </div>
             <div className="text-center">
               <p className="text-3xl font-bold text-green-600">
                 {attempts.filter(a => a.task_type.includes("Reading")).length}
               </p>
-              <p className="text-gray-500 text-sm mt-1">Reading Sessions</p>
+              <p className="text-gray-600 text-sm mt-1">Reading Sessions</p>
             </div>
             <div className="text-center">
               <p className="text-3xl font-bold text-purple-600">
                 {attempts.filter(a => a.task_type.includes("Speaking")).length}
               </p>
-              <p className="text-gray-500 text-sm mt-1">Speaking Sessions</p>
+              <p className="text-gray-600 text-sm mt-1">Speaking Sessions</p>
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-gray-100 text-center">
             <p className="text-4xl font-bold text-indigo-600">{attempts.length}</p>
-            <p className="text-gray-500 text-sm mt-1">Total Practice Sessions</p>
+            <p className="text-gray-600 text-sm mt-1">Total Practice Sessions</p>
           </div>
         </div>
       </div>

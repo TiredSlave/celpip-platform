@@ -134,13 +134,13 @@ export default function VocabularyPage() {
           <h2 className="text-xl font-bold text-gray-900 mb-2 border-b border-gray-200 pb-2">
             From reading & listening
           </h2>
-          <p className="text-sm text-gray-500 mb-4">Click a saved word for IPA (single words only) and sample sentence. Star to pin; delete when learned.</p>
+          <p className="text-sm text-gray-600 mb-4">Click a saved word for IPA (single words only) and sample sentence. Star to pin; delete when learned.</p>
 
           <div className="grid md:grid-cols-2 gap-6">
             <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
               <h3 className="font-semibold text-green-700 mb-3 flex items-center gap-2">📖 Reading</h3>
               {readingItems.length === 0 ? (
-                <p className="text-sm text-gray-400">No saved words yet. Open a reading task (plain-text passage) and click a word.</p>
+                <p className="text-sm text-gray-600">No saved words yet. Open a reading task (plain-text passage) and click a word.</p>
               ) : (
                 <ul className="space-y-2">
                   {readingItems.map(item => (
@@ -153,7 +153,7 @@ export default function VocabularyPage() {
             <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
               <h3 className="font-semibold text-orange-700 mb-3 flex items-center gap-2">🎧 Listening</h3>
               {listeningItems.length === 0 ? (
-                <p className="text-sm text-gray-400">No saved words yet. Expand the transcript and click a word.</p>
+                <p className="text-sm text-gray-600">No saved words yet. Expand the transcript and click a word.</p>
               ) : (
                 <ul className="space-y-2">
                   {listeningItems.map(item => (
@@ -169,7 +169,7 @@ export default function VocabularyPage() {
           <h2 className="text-xl font-bold text-gray-900 mb-2 border-b border-gray-200 pb-2">
             Speaking — useful phrases & connectors
           </h2>
-          <p className="text-sm text-gray-500 mb-4">{speakingRows.length} records. Click a card for an example sentence.</p>
+          <p className="text-sm text-gray-600 mb-4">{speakingRows.length} records. Click a card for an example sentence.</p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {speakingRows.map(row => (
               <button
@@ -183,7 +183,7 @@ export default function VocabularyPage() {
               >
                 <p className="text-xs font-bold text-purple-600 mb-1">{SPEAKING_TASK_LABELS[row.taskNumber] || `Task ${row.taskNumber}`}</p>
                 <p className="text-sm font-semibold text-gray-900 mb-1">{row.phrase}</p>
-                <p className="text-xs text-gray-500">{row.category}</p>
+                <p className="text-xs text-gray-600">{row.category}</p>
               </button>
             ))}
           </div>
@@ -198,7 +198,7 @@ export default function VocabularyPage() {
             top: Math.min(window.innerHeight - 220, popover.y),
           }}
         >
-          <p className="text-xs text-gray-500 uppercase font-bold mb-1">Saved word</p>
+          <p className="text-xs text-gray-600 uppercase font-bold mb-1">Saved word</p>
           <p className="text-lg font-bold text-gray-900 mb-2">{popover.item.term}</p>
           <p className="text-sm text-gray-700 mb-3">
             <span className="font-semibold">IPA: </span>
@@ -206,7 +206,7 @@ export default function VocabularyPage() {
           </p>
           <p className="text-xs font-semibold text-gray-700 mb-1">Sample sentence</p>
           <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 rounded-lg p-3">{popover.item.sampleSentence}</p>
-          <p className="text-xs text-gray-400 mt-2 line-clamp-3">Context: {popover.item.contextSnippet}</p>
+          <p className="text-xs text-gray-600 mt-2 line-clamp-3">Context: {popover.item.contextSnippet}</p>
           <button type="button" className="mt-3 text-sm text-blue-600 hover:underline" onClick={() => setPopover(null)}>
             Close
           </button>

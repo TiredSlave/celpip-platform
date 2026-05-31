@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { JsonLd } from "../components/JsonLd";
 import { speakingTasks, writingTasks, type TemplateTask } from "./templates-data";
 
 const faqs = [
@@ -67,6 +68,18 @@ function TaskCard({ task }: { task: TemplateTask }) {
 
 export default function TemplatesPage() {
   return (
+    <>
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: faqs.map(item => ({
+            "@type": "Question",
+            name: item.q,
+            acceptedAnswer: { "@type": "Answer", text: item.a },
+          })),
+        }}
+      />
     <main className="min-h-screen bg-slate-50">
       <section className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-indigo-700 to-purple-800 text-white">
         <div className="absolute inset-0 opacity-20">
@@ -148,5 +161,6 @@ export default function TemplatesPage() {
         </div>
       </section>
     </main>
+    </>
   );
 }

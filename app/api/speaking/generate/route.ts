@@ -1,6 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  enrichSpeakingImagePromptForTask,
+  SPEAKING_IMAGE_NEGATIVE_EXTRA,
+  SPEAKING_IMAGE_NEGATIVE_SPARSE,
+  SPEAKING_IMAGE_PROMPT_EXAMPLE,
+  SPEAKING_IMAGE_PROMPT_EXAMPLE_B,
+  SPEAKING_IMAGE_PROMPT_GUIDANCE,
+} from "../../../lib/speaking-image-style";
 
 const client = new Anthropic();
 const supabase = createClient(
@@ -33,16 +41,16 @@ async function generateImage(prompt: string): Promise<string | null> {
         body: JSON.stringify({
           text_prompts: [
             {
-              text: prompt + ", realistic photo, high quality, natural lighting, everyday Canadian scene",
+              text: enrichSpeakingImagePromptForTask(taskNumber, prompt),
               weight: 1
             },
             {
-              text: "blurry, distorted, text, watermark, nsfw, violence",
+              text: `blurry, distorted, text, watermark, nsfw, violence, ${SPEAKING_IMAGE_NEGATIVE_EXTRA}, ${SPEAKING_IMAGE_NEGATIVE_SPARSE}`,
               weight: -1
             }
           ],
           cfg_scale: 7,
-          height: 768,
+          height: 1024,
           width: 1024,
           samples: 1,
           steps: 30
@@ -105,9 +113,7 @@ export async function POST(request: Request) {
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
-      system: `You are a certified CELPIP examiner. Generate realistic
-               CELPIP Speaking test tasks. Return raw JSON only.
-               No markdown. No backticks. No explanation.`,
+      system: `You are a certified CELPIP examiner. Generate realistic CELPIP Speaking test tasks. Return raw JSON only. No markdown. No backticks. No explanation. For image_prompt fields, describe scenes for simple flat cartoon illustrations like CELPIP exam pictures — not photographs.`,
       messages: [
         {
           role: "user",
@@ -126,8 +132,8 @@ export async function POST(request: Request) {
             "sample_answer": "a complete band 9 spoken response",
             "sample_answer_band": 9,
             "sample_answer_notes": ["note 1", "note 2", "note 3"]
-            ${needsImage ? ',"image_prompt": "detailed realistic everyday Canadian scene for image generation"' : ""}
-            ${taskNumber === 5 ? ',"image_prompt_2": "second different everyday Canadian scene for comparison"' : ""}
+            ${needsImage ? `,"image_prompt": "${SPEAKING_IMAGE_PROMPT_EXAMPLE}"` : ""}
+            ${taskNumber === 5 ? `,"image_prompt_2": "${SPEAKING_IMAGE_PROMPT_EXAMPLE_B}"` : ""}
           }`
         }
       ]
@@ -147,7 +153,7 @@ export async function POST(request: Request) {
       console.log("Generating image(s) with Stability AI...");
 
       if (taskNumber === 3 && task.image_prompt) {
-        const base64 = await generateImage(task.image_prompt);
+        const base64 = await generateImage(task.image_prompt, 3);
         if (base64) {
           const filename = `task3_${Date.now()}.png`;
           task.image_url = await uploadImageToSupabase(base64, filename);

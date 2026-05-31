@@ -249,7 +249,7 @@ export default function SpeakingPage() {
               <h2 className="text-xl font-bold text-purple-700">
                 Speaking Task {task.task_number}
               </h2>
-              <div className="flex gap-4 text-sm text-gray-500">
+              <div className="flex gap-4 text-sm text-gray-600">
                 <span>⏱ Prep: {task.preparation_time_seconds}s</span>
                 <span>🎤 Speak: {task.speaking_time_seconds}s</span>
               </div>
@@ -290,11 +290,11 @@ export default function SpeakingPage() {
         {/* Preparation Phase */}
         {phase === "preparing" && (
           <div className="bg-white rounded-xl shadow p-8 mb-6 text-center">
-            <p className="text-gray-500 mb-2">Preparation Time</p>
+            <p className="text-gray-600 mb-2">Preparation Time</p>
             <p className="text-8xl font-bold text-blue-600 font-mono mb-4">
               {prepTimeLeft}
             </p>
-            <p className="text-gray-500">
+            <p className="text-gray-600">
               Read the task carefully and plan your response
             </p>
             {task && (
@@ -316,7 +316,7 @@ export default function SpeakingPage() {
             <p className="text-8xl font-bold text-red-600 font-mono mb-4">
               {recTimeLeft}
             </p>
-            <p className="text-gray-500 mb-6">Speak clearly into your microphone</p>
+            <p className="text-gray-600 mb-6">Speak clearly into your microphone</p>
             {task && (
               <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
                 <p className="text-gray-700">{task.prompt}</p>
@@ -339,10 +339,10 @@ export default function SpeakingPage() {
             <h3 className="text-xl font-bold text-gray-800 mb-2">
               Processing Your Response
             </h3>
-            <p className="text-gray-500 mb-2">
+            <p className="text-gray-600 mb-2">
               Transcribing audio with Whisper AI...
             </p>
-            <p className="text-gray-400 text-sm">
+            <p className="text-gray-600 text-sm">
               Evaluating with Claude CELPIP examiner...
             </p>
           </div>
@@ -367,19 +367,19 @@ export default function SpeakingPage() {
               <p className={`text-7xl font-bold ${getBandColor(evaluation.overall_band)}`}>
                 {evaluation.overall_band}
               </p>
-              <p className="text-gray-400 text-sm mt-1">Overall Band Score</p>
+              <p className="text-gray-600 text-sm mt-1">Overall Band Score</p>
             </div>
 
             {/* Subscores */}
             <div className="grid grid-cols-2 gap-4">
               {Object.entries(evaluation.subscores).map(([key, value]) => (
                 <div key={key} className="bg-white rounded-xl shadow p-4">
-                  <p className="text-sm text-gray-500 capitalize mb-1">
+                  <p className="text-sm text-gray-600 capitalize mb-1">
                     {key.replace(/_/g, " ")}
                   </p>
                   <p className={`text-2xl font-bold ${getBandColor(value as number)}`}>
                     {value as number}
-                    <span className="text-gray-400 text-sm font-normal"> / 12</span>
+                    <span className="text-gray-600 text-sm font-normal"> / 12</span>
                   </p>
                 </div>
               ))}
