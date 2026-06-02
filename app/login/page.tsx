@@ -20,6 +20,8 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const confirmed = searchParams.get("confirmed");
   const oauthFailed = searchParams.get("error") === "oauth_failed";
+  const authCallbackMissing = searchParams.get("error") === "auth_callback_missing";
+  const verificationFailed = searchParams.get("error") === "verification_failed";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -64,7 +66,19 @@ function LoginForm() {
 
       {oauthFailed && (
         <AuthAlert tone="error">
-          Google sign-in failed. Check your Supabase Auth settings and try again.
+          Google sign-in failed. Check Supabase Google provider settings and redirect URLs, then try again.
+        </AuthAlert>
+      )}
+
+      {authCallbackMissing && (
+        <AuthAlert tone="error">
+          Sign-in did not complete. Please use &quot;Continue with Google&quot; again.
+        </AuthAlert>
+      )}
+
+      {verificationFailed && (
+        <AuthAlert tone="error">
+          Email verification link was invalid or expired. Request a new confirmation email.
         </AuthAlert>
       )}
 

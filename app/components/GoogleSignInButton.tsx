@@ -13,7 +13,11 @@ export function GoogleSignInButton({ disabled }: { disabled?: boolean }) {
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
       },
     });
     if (oauthError) {
