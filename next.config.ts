@@ -9,6 +9,12 @@ const nextConfig: NextConfig = {
       { source: "/listening", destination: "/practice/listening", permanent: false },
     ];
   },
+  async rewrites() {
+    return [
+      // Legacy /auth/callback URLs (Supabase, bookmarks) → API route handler
+      { source: "/auth/callback", destination: "/api/auth/callback" },
+    ];
+  },
 };
 
 export default nextConfig;
