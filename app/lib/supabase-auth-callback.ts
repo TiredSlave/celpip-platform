@@ -3,9 +3,6 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSiteUrl } from "./site-seo";
 
-export const authCallbackDynamic = "force-dynamic" as const;
-export const authCallbackRuntime = "nodejs" as const;
-
 function redirectTarget(request: Request, path: string): string {
   const configured = getSiteUrl();
   const { origin } = new URL(request.url);

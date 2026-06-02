@@ -1,11 +1,7 @@
-import {
-  authCallbackDynamic,
-  authCallbackRuntime,
-  handleSupabaseAuthCallback,
-} from "../../../lib/supabase-auth-callback";
+import { handleSupabaseAuthCallback } from "../../../lib/supabase-auth-callback";
 
-export const dynamic = authCallbackDynamic;
-export const runtime = authCallbackRuntime;
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   return handleSupabaseAuthCallback(request);
