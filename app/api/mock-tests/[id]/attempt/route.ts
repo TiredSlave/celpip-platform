@@ -9,7 +9,7 @@ import {
   normalizeAttemptRow,
   updateMockAttempt,
 } from "../../../../lib/mock-test-attempt-db";
-import type { MockPartResult, MockTaskResultsMap } from "../../../../lib/mock-test-results";
+import type { MockPartResult, MockTaskResultsStorage } from "../../../../lib/mock-test-results";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -149,9 +149,9 @@ export async function PATCH(request: Request, { params }: Params) {
   completed.add(order);
   const completedList = [...completed].sort((a, b) => a - b);
 
-  const taskResults: MockTaskResultsMap & { _completed_orders?: number[] } = {
+  const taskResults: MockTaskResultsStorage = {
     ...(typeof row.task_results === "object" && row.task_results !== null
-      ? (row.task_results as MockTaskResultsMap)
+      ? (row.task_results as MockTaskResultsStorage)
       : {}),
     _completed_orders: completedList,
   };

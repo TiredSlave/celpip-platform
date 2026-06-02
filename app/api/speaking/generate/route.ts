@@ -27,7 +27,7 @@ const taskDescriptions: Record<number, string> = {
   8: "Describe an unusual situation"
 };
 
-async function generateImage(prompt: string): Promise<string | null> {
+async function generateImage(prompt: string, taskNumber: number): Promise<string | null> {
   try {
     const response = await fetch(
       "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
@@ -157,22 +157,6 @@ export async function POST(request: Request) {
         if (base64) {
           const filename = `task3_${Date.now()}.png`;
           task.image_url = await uploadImageToSupabase(base64, filename);
-        }
-      }
-
-      if (taskNumber === 5 && false) {
-        const [base64_1, base64_2] = await Promise.all([
-          generateImage(task.image_prompt || "busy urban scene in Canada"),
-          generateImage(task.image_prompt_2 || "quiet rural scene in Canada")
-        ]);
-
-        if (base64_1) {
-          const filename1 = `task5_1_${Date.now()}.png`;
-          task.image_url_1 = await uploadImageToSupabase(base64_1, filename1);
-        }
-        if (base64_2) {
-          const filename2 = `task5_2_${Date.now() + 1}.png`;
-          task.image_url_2 = await uploadImageToSupabase(base64_2, filename2);
         }
       }
     }

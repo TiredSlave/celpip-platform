@@ -1,21 +1,23 @@
 "use client";
 
+type WritingContent = {
+  scenario?: string;
+  instructions?: string;
+  bullet_points?: string[];
+  topic?: string;
+  context?: string;
+  question?: string;
+  option_a?: string;
+  option_b?: string;
+  opinion_options?: string[];
+  word_limit?: number;
+};
+
 type Props = {
   task: {
     id: string;
     task_type: string;
-    content: {
-      scenario?: string;
-      instructions?: string;
-      bullet_points?: string[];
-      topic?: string;
-      context?: string;
-      question?: string;
-      option_a?: string;
-      option_b?: string;
-      opinion_options?: string[];
-      word_limit: number;
-    };
+    content: Record<string, unknown>;
   };
   response: string;
   onResponse: (text: string) => void;
@@ -24,6 +26,25 @@ type Props = {
   readOnly?: boolean;
 };
 
+function writingContent(raw: Record<string, unknown>): WritingContent {
+  const str = (key: string) => (typeof raw[key] === "string" ? (raw[key] as string) : undefined);
+  const strList = (key: string) =>
+    Array.isArray(raw[key]) ?
+      (raw[key] as unknown[]).filter((x): x is string => typeof x === "string")
+    : undefined;
+  return {
+    scenario: str("scenario"),
+    instructions: str("instructions"),
+    bullet_points: strList("bullet_points"),
+    topic: str("topic"),
+    context: str("context"),
+    question: str("question"),
+    option_a: str("option_a"),
+    option_b: str("option_b"),
+    opinion_options: strList("opinion_options"),
+    word_limit: typeof raw.word_limit === "number" ? raw.word_limit : undefined,
+  };
+}
 export default function MockWritingPanel({
   task,
   response,
@@ -32,7 +53,7 @@ export default function MockWritingPanel({
   onTask2Choice,
   readOnly = false,
 }: Props) {
-  const c = task.content;
+  const c = writingContent(task.content);
   const isTask2 = task.task_type === "Writing Task 2";
   const optA = c.option_a ?? c.opinion_options?.[0];
   const optB = c.option_b ?? c.opinion_options?.[1];

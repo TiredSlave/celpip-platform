@@ -389,7 +389,7 @@ function TakeContent() {
       )}
       {skill === "Writing" && (
         <MockWritingPanel
-          task={currentSlot.admin_tasks as Parameters<typeof MockWritingPanel>[0]["task"]}
+          task={currentSlot.admin_tasks}
           response={writingResponse}
           onResponse={setWritingResponse}
           task2Choice={task2Choice}

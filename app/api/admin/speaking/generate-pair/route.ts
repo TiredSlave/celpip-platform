@@ -472,7 +472,9 @@ export async function POST(request: Request) {
         {
           task_type: "Speaking Task 5",
           difficulty,
-          title: task5.situation?.slice(0, 80) || "Speaking Task 5",
+          title:
+            (typeof task5.situation === "string" ? task5.situation.slice(0, 80) : null) ||
+            "Speaking Task 5",
           content: task5,
           section: "Speaking",
           sequence_number: 5,
@@ -481,7 +483,9 @@ export async function POST(request: Request) {
         {
           task_type: "Speaking Task 6",
           difficulty,
-          title: task6.situation?.slice(0, 80) || "Speaking Task 6",
+          title:
+            (typeof task6.situation === "string" ? task6.situation.slice(0, 80) : null) ||
+            "Speaking Task 6",
           content: task6,
           section: "Speaking",
           sequence_number: 6,

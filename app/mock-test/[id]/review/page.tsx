@@ -126,7 +126,7 @@ function ReviewContent() {
       {test.test_type === "Writing" && (
         <div className="flex-1 min-h-0 overflow-hidden">
         <MockWritingPanel
-          task={adminTask as Parameters<typeof MockWritingPanel>[0]["task"]}
+          task={adminTask}
           response={saved.studentResponse || ""}
           onResponse={() => {}}
           task2Choice={saved.writingTask2Choice ?? null}
@@ -186,7 +186,7 @@ function ReviewContent() {
               <p className="text-sm text-gray-800 whitespace-pre-wrap">{saved.transcript}</p>
             </div>
           )}
-          {saved.feedback && typeof saved.feedback === "object" && (
+          {typeof saved.feedback === "object" && saved.feedback !== null && (
             <div className="bg-white rounded-xl border p-4">
               <p className="text-xs font-bold text-gray-600 mb-2">Band scores</p>
               <p className="text-2xl font-bold text-purple-700">

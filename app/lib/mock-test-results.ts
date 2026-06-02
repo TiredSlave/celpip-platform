@@ -2,7 +2,7 @@
 export type MockPartResult = {
   taskId: string;
   taskType: string;
-  answers: Record<string, string | number>;
+  answers: Record<string | number, string>;
   score?: number;
   total?: number;
   studentResponse?: string;
@@ -15,6 +15,13 @@ export type MockPartResult = {
 };
 
 export type MockTaskResultsMap = Record<string, MockPartResult>;
+
+/** JSON stored on mock_test_attempts.task_results — order keys plus legacy meta fields. */
+export type MockTaskResultsStorage = {
+  _completed_orders?: number[];
+  _status?: string;
+  [orderKey: string]: MockPartResult | number[] | string | undefined;
+};
 
 export function getPartResult(
   map: MockTaskResultsMap | null | undefined,

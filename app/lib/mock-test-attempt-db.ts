@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { MockTaskResultsMap } from "./mock-test-results";
+import type { MockTaskResultsStorage } from "./mock-test-results";
 
 /** Postgres undefined_column or PostgREST schema cache (PGRST204). */
 export function isSchemaColumnError(error: { code?: string; message?: string } | null): boolean {
@@ -14,15 +14,9 @@ type AttemptRow = Record<string, unknown>;
 const META_COMPLETED = "_completed_orders";
 const META_STATUS = "_status";
 
-function taskResultsOf(row: AttemptRow): MockTaskResultsMap & {
-  [META_COMPLETED]?: number[];
-  [META_STATUS]?: string;
-} {
+function taskResultsOf(row: AttemptRow): MockTaskResultsStorage {
   if (typeof row.task_results === "object" && row.task_results !== null) {
-    return row.task_results as MockTaskResultsMap & {
-      [META_COMPLETED]?: number[];
-      [META_STATUS]?: string;
-    };
+    return row.task_results as MockTaskResultsStorage;
   }
   return {};
 }
@@ -237,7 +231,7 @@ export async function updateMockAttempt(
     const tr = {
       ...taskResultsOf(existingRow || {}),
       ...(typeof payload.task_results === "object" && payload.task_results !== null
-        ? (payload.task_results as MockTaskResultsMap)
+        ? (payload.task_results as MockTaskResultsStorage)
         : {}),
     };
 
