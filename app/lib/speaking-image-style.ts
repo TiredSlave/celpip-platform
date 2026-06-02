@@ -26,22 +26,22 @@ export const SPEAKING_IMAGE_NEGATIVE_PETS =
 
 /** Put density FIRST — image models weight early tokens heavily. */
 export const CELPIP_IMAGE_DENSITY_PREFIX =
-  "CELPIP English test practice picture, simple editorial cartoon, square framing, exactly 4-5 clear activity groups, soft flat colors, uncluttered composition, open space, not photorealistic, no readable text";
+  "CELPIP English test practice picture, simple editorial cartoon, square framing, exactly 5 clear activity groups, soft flat colors, uncluttered composition, open space, not photorealistic, no readable text";
 
 export const SPEAKING_IMAGE_STYLE_TAIL =
   "Canadian everyday setting, square framing, no readable text no words no letters on signs";
 
 export const SPEAKING_IMAGE_PROMPT_GUIDANCE = `For image_prompt, write 120–220 words of PURE visual description (like official CELPIP exam pictures). Structure it in three layers:
-FOREGROUND: name 3–4 people with clothing colors and exact actions plus props they hold.
+FOREGROUND: name 5 people with clothing colors and exact actions plus props they hold.
 MIDDLE GROUND: name 2–3 different people or groups doing unrelated activities.
 BACKGROUND: architecture, vehicles, windows, trees, weather, extra staff or bystanders.
 Include at least 12 people and 15+ objects total. Never write "simple scene" or one-sentence prompts.
 Do not include test instructions — only what the illustrator should draw.`;
 
-/** Task 3/4: one square snapshot, 4–5 purposeful activities, simple and uncluttered. */
+/** Task 3/4: one square snapshot, 5 purposeful activities, simple and uncluttered. */
 export const SPEAKING_TASK34_IMAGE_GUIDANCE = `CELPIP Speaking Task 3 and 4 — picture rules:
 ${SPEAKING_TASK34_REQUIREMENT_PROMPT}
-Exactly 4–5 activities only — each easy to describe and predict. No crowd, no trivia clutter.
+Exactly 5 activities — each easy to describe and predict. No crowd, no trivia clutter.
 Task 3: name the place, then each affair. Task 4: predict next for 2–3 affairs in this same scene.`;
 
 export const SPEAKING_IMAGE_PROMPT_EXAMPLE =
@@ -76,10 +76,14 @@ export type Task34PredictionHook = {
 
 export type Task34SceneProfile = {
   setting: string;
-  /** Exactly 4–5 unrelated activities in one location (Task 3 describe each). */
+  /** Exactly 5 unrelated activities in one location (Task 3 describe each). */
   focalPoints: string[];
   /** One prediction hook per activity (Task 4 uses 2–3 of these). */
   predictionHooks: Task34PredictionHook[];
+  /** Planner category per slot — prefixed in Stability prompts. */
+  slotCategories?: string[];
+  /** Short lines for Stability AI — full focalPoints are too long and lose verbs when truncated. */
+  stabilityLines?: string[];
   /** Shared location backdrop — architecture, weather, scattered props. */
   backgroundHint: string;
   /** Optional explicit prompt layers (override auto-split of focalPoints). */
@@ -99,13 +103,14 @@ export type Task8SceneProfile = {
 };
 
 import { SPEAKING_TASK5_SCENE_PAIRS } from "./speaking-task5-scenes";
-import { SPEAKING_TASK34_SCENE_PROFILES } from "./speaking-task34-scenes";
+import { getTask34TemplateScene, SPEAKING_TASK34_SCENE_PROFILES } from "./speaking-task34-scenes";
 import { SPEAKING_TASK8_SCENE_PROFILES } from "./speaking-task8-scenes";
 
 export {
   SPEAKING_TASK5_SCENE_PAIRS,
   SPEAKING_TASK34_SCENE_PROFILES,
   SPEAKING_TASK8_SCENE_PROFILES,
+  getTask34TemplateScene,
 };
 
 /** Text plan stored on tasks and sent to vision / Task 4. */
@@ -169,6 +174,13 @@ export function pickTask34Scene() {
   return SPEAKING_TASK34_SCENE_PROFILES[
     Math.floor(Math.random() * SPEAKING_TASK34_SCENE_PROFILES.length)
   ];
+}
+
+/** Curated templates only — pool and supermarket (Stability fails on library/museum/rink). */
+export function pickOutdoorTask34Scene() {
+  return Math.random() < 0.55
+    ? getTask34TemplateScene("pool")
+    : getTask34TemplateScene("supermarket");
 }
 
 export function pickTask34Variation() {
@@ -236,6 +248,9 @@ export type Task34GenerationScript = {
   stability_seed?: number;
   vision_description?: string;
   task4_llm_prompt?: string;
+  /** Structured LLM scene plan (Task 3/4 hybrid pipeline) */
+  llm_scene_plan?: Record<string, unknown>;
+  scene_planned_by?: "llm" | "fallback" | "curated";
 };
 
 export function pickTask8Scene() {
@@ -300,7 +315,7 @@ const TASK5_STABILITY_STYLE =
   `${SINGLE_SNAPSHOT_PROMPT_LEAD}, ${CELPIP_COMIC_ILLUSTRATION_STYLE}, CELPIP speaking task 5 ONE option only, square framing, single continuous editorial cartoon illustration filling the frame, one room or one product or one vehicle, not a comparison layout not side-by-side options, props and architecture visible, at most zero to two tiny background people, not a party not a crowd`;
 
 export const TASK34_STABILITY_STYLE =
-  `${SINGLE_SNAPSHOT_PROMPT_LEAD}, ${CELPIP_COMIC_ILLUSTRATION_STYLE}, CELPIP speaking task 3 describe a picture, simple cartoon with exactly 4-5 unrelated purposeful activities, uncluttered, square framing, open space between groups`;
+  `${SINGLE_SNAPSHOT_PROMPT_LEAD}, ${CELPIP_COMIC_ILLUSTRATION_STYLE}, CELPIP speaking task 3 describe a picture, simple cartoon with exactly 5 unrelated purposeful activities, uncluttered, square framing, open space between groups`;
 
 export function pickTask5ScenePair() {
   return SPEAKING_TASK5_SCENE_PAIRS[

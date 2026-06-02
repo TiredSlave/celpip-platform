@@ -336,9 +336,7 @@ export async function POST(request: Request) {
     }
 
     if (taskNumber === 3) {
-      const scene = pickTask34Scene();
-      const visualPlan = buildTask34VisualPlan(scene);
-      const imageGen = await generateValidatedTask34Image(scene);
+      const imageGen = await generateValidatedTask34Image();
 
       if (!imageGen.ok) {
         warnings.push(`Task 3 image: ${imageGen.error}`);
@@ -347,6 +345,9 @@ export async function POST(request: Request) {
           { status: 500 },
         );
       }
+
+      const scene = imageGen.scene;
+      const visualPlan = buildTask34VisualPlan(scene);
 
       if (imageGen.validationWarning) {
         warnings.push(`Task 3 image: ${imageGen.validationWarning} Saved best generated image.`);
@@ -364,11 +365,11 @@ export async function POST(request: Request) {
         scene.focalPoints,
       );
       const focalPoints =
-        aligned?.focal_points?.length && aligned.focal_points.length >= 4
+        aligned?.focal_points?.length && aligned.focal_points.length >= 3
           ? aligned.focal_points
           : scene.focalPoints;
 
-      if (aligned && aligned.focal_points.length < 4) {
+      if (aligned && aligned.focal_points.length < 3) {
         warnings.push(
           `Task 3: vision saw only ${aligned.focal_points.length} separate activities in the image; text uses planned ${scene.focalPoints.length} activity script.`,
         );
@@ -383,6 +384,8 @@ export async function POST(request: Request) {
         stability_prompt: stabilityPrompt,
         stability_seed: stabilitySeed,
         vision_description: aligned?.visual_description,
+        llm_scene_plan: imageGen.scenePlan as unknown as Record<string, unknown>,
+        scene_planned_by: imageGen.scenePlannedBy,
       };
 
       const base = buildTask3LockedContent(scene);
@@ -397,7 +400,7 @@ export async function POST(request: Request) {
             sample_answer_band: aligned.sample_answer_band,
             sample_answer_notes: [
               "Describes the generated image (vision-aligned)",
-              "Covers about 4–5 purposeful activities in one simple square snapshot",
+              "Covers about 5 purposeful activities in one simple square snapshot",
             ],
             image_grounded: true,
             scene_profile: scene.setting,
@@ -441,7 +444,7 @@ export async function POST(request: Request) {
         warnings.push(`Task 5 images: ${imageGen.error}`);
         return NextResponse.json(
           {
-            error: `${imageGen.error}. Check STABILITY_API_KEY and ANTHROPIC_API_KEY, then try again. For local dev only: SPEAKING_SKIP_TASK5_IMAGE_CHECK=true`,
+            error: `${imageGen.error}. Check FAL_KEY / STABILITY_API_KEY and ANTHROPIC_API_KEY, then try again. For local dev only: SPEAKING_SKIP_TASK5_IMAGE_CHECK=true`,
             warnings,
           },
           { status: 500 },
@@ -561,7 +564,7 @@ export async function POST(request: Request) {
         taskNumber === 8
           ? " For Task 8, follow the required bizarre wrong-context scene exactly: ONE central odd action, surprised bystanders, obviously out of place — not a normal routine. Never default to dogs, cats, or pets."
           : taskNumber === 3
-            ? " For Task 3, the picture must be ONE square scene with exactly 4–5 purposeful activities — simple and uncluttered, not a crowd, not several separate scenes."
+            ? " For Task 3, the picture must be ONE square scene with exactly 5 purposeful activities — simple and uncluttered, not a crowd, not several separate scenes."
             : " For picture tasks, include 8–12 describable facts with many people and props."
       }`,
       messages: [
@@ -590,15 +593,16 @@ export async function POST(request: Request) {
       console.log("Generating image(s) with Stability AI v2...");
 
       if (taskNumber === 3 && task34Scene) {
-        const visualPlan = buildTask34VisualPlan(task34Scene);
-        const imageGen = await generateValidatedTask34Image(task34Scene);
+        const imageGen = await generateValidatedTask34Image();
         if (!imageGen.ok) {
           warnings.push(`Task 3 image: ${imageGen.error}`);
         } else {
+          const scene = imageGen.scene;
+          const visualPlan = buildTask34VisualPlan(scene);
           task.visual_description = visualPlan;
           task.image_prompt = visualPlan;
-          task.situation = task.situation || task34Scene.setting;
-          task.describe_focus = task34Scene.focalPoints;
+          task.situation = task.situation || scene.setting;
+          task.describe_focus = scene.focalPoints;
           task.image_url = await uploadImageToSupabase(
             imageGen.base64,
             `task3_${Date.now()}.png`,

@@ -6,6 +6,12 @@ import {
   SPEAKING_IMAGE_NEGATIVE_SPARSE,
 } from "./speaking-image-style";
 import { SINGLE_SNAPSHOT_NEGATIVE_EXTRA, TASK8_NORMAL_SCENE_NEGATIVE } from "./speaking-single-snapshot";
+import { falKey } from "./speaking-image-fal-config";
+import {
+  getSpeakingImageRuntimeInfo,
+  logSpeakingImageAttempt,
+  parseSpeakingImageProvider,
+} from "./speaking-image-provider";
 
 export type SpeakingImageGenResult =
   | { ok: true; base64: string }
@@ -13,7 +19,7 @@ export type SpeakingImageGenResult =
 
 const MAX_PROMPT_CHARS = 3200;
 
-function buildNegativePrompt(taskNumber?: number): string {
+export function buildNegativePrompt(taskNumber?: number): string {
   const parts = [
     "blurry",
     "distorted",
@@ -29,9 +35,15 @@ function buildNegativePrompt(taskNumber?: number): string {
     parts.push(
       "overcrowded, cluttered, chaotic, too many people, busy crowd, visual noise, messy background, scattered props, junk everywhere, hyper detail, trivia objects, twelve people, large group",
       "neon rainbow, kaleidoscope, muddy blur, unreadable blob faces",
-      "people sitting idle, waiting room boredom, everyone standing still, reading alone, no movement, empty waiting, static pose",
-      "single activity only, one dominant figure, hero shot, close-up portrait, clone identical people, only two activities, only three activities, six activities, seven activities",
+      "people sitting idle, waiting room boredom, empty waiting, static pose",
+      "empty patio, vacant room, no people, furniture only, empty tables and chairs, deserted cafe, scene without people, architectural rendering without figures",
+      "children sitting socializing, playground chatting, idle standing group, people milling with no action",
+      "single activity only, one dominant figure, hero shot, close-up portrait, clone identical people, only two activities, only three activities, only four activities, six activities, seven activities",
       "repeated similar actions, everyone helping, everyone handing, same gesture copied, duplicate poses",
+      "everyone typing writing reading at desks, office coworking, study hall, library study tables, four people seated doing desk work, same seated category",
+      "seated circle, group discussion, meeting round table, seminar, conference, classroom circle, people in chairs with papers, notebooks, clipboards, study group, book club, lecture hall",
+      "indoor library reading room, office meeting, waiting room all seated, museum lecture",
+      "classroom, schoolroom, students at desks, teacher at desk, chalkboard lesson, lecture hall audience, bleachers, spectators seated watching, grandstand crowd",
       "outdoor volcano field trip, children sitting on grass with worksheets, note-taking crowd, milling school group",
       SINGLE_SNAPSHOT_NEGATIVE_EXTRA,
     );
@@ -106,10 +118,64 @@ export type SpeakingImageGenOptions = {
   useComicPreset?: boolean;
   /** Task 3/4/5/8 use square 1:1 (official CELPIP-style framing). */
   aspectRatio?: "1:1" | "16:9" | "9:16";
+  /** Stability style_preset — digital-art tends to follow activity lists better than default. */
+  stylePreset?: string;
+  /** When true, retry Fal even if a recent billing lock was seen (Task 3/4 multi-attempt loop). */
+  retryFalDespiteBillingLock?: boolean;
+  /** Second Fal submit if the first prompt hits content_policy (pre-sanitized short prompt). */
+  falPromptFallback?: string;
 };
 
+export function speakingImageProvider(): "stability" | "fal" {
+  return parseSpeakingImageProvider();
+}
+
+const FAL_LOCK_TTL_MS = 15_000;
+let falBillingLock: { key: string; until: number } | null = null;
+let lastFalSuccessAt = 0;
+
+function falBillingLockedNow(): boolean {
+  if (!falBillingLock) return false;
+  if (Date.now() > falBillingLock.until) {
+    falBillingLock = null;
+    return false;
+  }
+  const currentKey = falKey() ?? "";
+  if (currentKey && currentKey !== falBillingLock.key) {
+    falBillingLock = null;
+    return false;
+  }
+  return true;
+}
+
+function rememberFalBillingLock() {
+  falBillingLock = {
+    key: falKey() ?? "",
+    until: Date.now() + FAL_LOCK_TTL_MS,
+  };
+}
+
+function clearFalBillingLock() {
+  falBillingLock = null;
+}
+
+export function isFalBillingLockError(error: string): boolean {
+  const lower = error.toLowerCase();
+  return (
+    lower.includes("403") ||
+    lower.includes("exhausted balance") ||
+    lower.includes("user is locked") ||
+    lower.includes("insufficient balance") ||
+    lower.includes("insufficient credits")
+  );
+}
+
+function stabilityApiKey(): string | null {
+  return process.env.STABILITY_API_KEY?.trim() || null;
+}
+
 /** Stability AI v2 core with comic-book preset for exam-style cartoons. */
-export async function generateSpeakingImage(
+export async function generateSpeakingImageStability(
   prompt: string,
   taskNumber?: number,
   options?: SpeakingImageGenOptions,
@@ -209,4 +275,79 @@ export async function generateSpeakingImage(
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: `Image request failed: ${msg}` };
   }
+}
+
+/** Task 3/4/5/8 images — Stability or Fal via SPEAKING_IMAGE_PROVIDER. */
+export async function generateSpeakingImage(
+  prompt: string,
+  taskNumber?: number,
+  options?: SpeakingImageGenOptions,
+): Promise<SpeakingImageGenResult> {
+  const runtime = getSpeakingImageRuntimeInfo();
+
+  const skipFalDueToLock =
+    falBillingLockedNow() && !options?.retryFalDespiteBillingLock;
+  const preferFal = runtime.configuredProvider === "fal" && !skipFalDueToLock;
+
+  if (preferFal) {
+    logSpeakingImageAttempt("fal");
+    const { generateSpeakingImageFal } = await import("./speaking-image-fal");
+    const falResult = await generateSpeakingImageFal(prompt, taskNumber, options);
+
+    if (falResult.ok) {
+      clearFalBillingLock();
+      lastFalSuccessAt = Date.now();
+      console.log(
+        `[speaking-image] Generated with Fal model=${runtime.falModel} key=${runtime.falKeyFingerprint}`,
+      );
+      return falResult;
+    }
+
+    const billingLock = isFalBillingLockError(falResult.error);
+    const shouldFallback =
+      billingLock || /fal_key is missing/i.test(falResult.error);
+
+    if (shouldFallback) {
+      if (billingLock) {
+        rememberFalBillingLock();
+        const afterSuccess =
+          lastFalSuccessAt > 0 && Date.now() - lastFalSuccessAt < 120_000;
+        console.warn(
+          `[speaking-image] Fal billing lock for key ${runtime.falKeyFingerprint}: ${falResult.error.slice(0, 160)}`,
+        );
+        if (afterSuccess && (taskNumber === 3 || taskNumber === 4)) {
+          console.warn(
+            "[speaking-image] Fal worked moments ago but now returns exhausted balance. " +
+              "Task 3/4 needs up to 7 images — top up fal.ai billing or use a cheaper FAL_FLUX_MODEL. " +
+              "Remaining attempts in this run may fall back to Stability AI.",
+          );
+        }
+      }
+
+      if (runtime.falFallbackEnabled && stabilityApiKey()) {
+        logSpeakingImageAttempt("stability", "Fal failed — fallback");
+        return generateSpeakingImageStability(prompt, taskNumber, options);
+      }
+
+      return {
+        ok: false,
+        error: `${falResult.error} Fal key ${runtime.falKeyFingerprint} is still rejected by fal.ai. Confirm the dashboard account matches this API key, or email support@fal.ai. To disable Stability fallback while debugging, set SPEAKING_IMAGE_FAL_FALLBACK=false.`,
+      };
+    }
+
+    return { ok: false, error: falResult.error };
+  }
+
+  if (runtime.configuredProvider === "fal" && skipFalDueToLock) {
+    if (runtime.falFallbackEnabled && stabilityApiKey()) {
+      logSpeakingImageAttempt(
+        "stability",
+        `Fal skipped (recent billing lock on key ${runtime.falKeyFingerprint})`,
+      );
+      return generateSpeakingImageStability(prompt, taskNumber, options);
+    }
+  }
+
+  logSpeakingImageAttempt("stability");
+  return generateSpeakingImageStability(prompt, taskNumber, options);
 }

@@ -7,10 +7,14 @@ import {
   SPEAKING_TASK34_REQUIREMENT_PROMPT,
   SPEAKING_TASK4_LEARNER_PROMPT,
 } from "./speaking-task34-requirement";
+import { TASK34_ACTION_CATEGORY_EXAMPLES } from "./speaking-task34-diversity";
 
 const client = new Anthropic();
 
-const MIN_TASK34_ACTIVITIES = 4;
+const MIN_TASK34_ACTIVITIES = 5;
+
+/** Shared vision rule — reject when 2+ groups share one action category. */
+const TASK34_ACTION_CATEGORY_VISION_RULE = `- activities_diverse: Assign each visible activity group ONE action category. ${TASK34_ACTION_CATEGORY_EXAMPLES} Set FALSE only when 2+ groups clearly share desk/study (typing, writing, reading at desk/table as the main action) OR idle socializing. Jumping, mopping, paying, eating ice cream, scanning groceries, carrying bags are DIFFERENT categories — do NOT lump them together. Set TRUE when 5 groups show visibly different action types in one scene.`;
 
 export type Task34ImageCheckResult = {
   count: number;
@@ -39,11 +43,9 @@ export async function checkTask34Image(
       `\nReference script (for notes only — image does NOT need to match these exactly):\n${options.expectedActivities.map((a, i) => `${i + 1}. ${a}`).join("\n")}`
     : "";
 
-  const countingRules = options?.expectedActivities?.length ?
-    `- activity_count: Count DISTINCT unrelated activity groups actually VISIBLE (target 4–5, cap at 5). Ignore reference script when counting — count what you SEE.
-- activities_diverse: Judge ONLY visible groups. false if similar repeated gestures or a crowd. NOT false merely because reference script is missing.`
-    : `- activity_count: Count clearly separate unrelated affairs (target 4–5, cap at 5).
-- activities_diverse: false if visible groups share the same type of action. true if each group has a different verb and props.`;
+  const countingRules = `- activity_count: Count DISTINCT groups of PEOPLE doing different actions (target exactly 5). If no people are visible, activity_count MUST be 0.
+${TASK34_ACTION_CATEGORY_VISION_RULE}
+- actionable_activities: false if no people visible, OR if most groups are idle/socializing/standing with nothing to describe (children chatting, people milling). true if each group shows a clear purposeful verb (paying, jumping, carrying, fixing, eating, teaching, cleaning).`;
 
   try {
     const resp = await client.messages.create({
@@ -69,15 +71,15 @@ export async function checkTask34Image(
 ${expectedBlock}
 
 Return JSON only:
-{"activity_count": <integer 0-5>, "single_scene": <true or false>, "single_snapshot": <true or false>, "activities_diverse": <true or false>, "equal_focus": <true or false>, "clear_composition": <true or false>, "actionable_activities": <true or false>, "notes": "one short sentence"}
+{"activity_count": <integer 0-6>, "single_scene": <true or false>, "single_snapshot": <true or false>, "activities_diverse": <true or false>, "equal_focus": <true or false>, "clear_composition": <true or false>, "actionable_activities": <true or false>, "notes": "one short sentence"}
 
 Rules:
 - single_scene: one continuous place.
 - single_snapshot: false if ANY panel borders, film strip layout, side-by-side duplicate rooms, or same place at different times. true only for ONE unified photograph.
 ${countingRules}
 - equal_focus: true if most activity groups are easy to spot; false only if one giant group dominates and others are tiny or missing.
-- clear_composition: false if overcrowded, messy, chaotic, or too many tiny background figures. true if simple readable cartoon with 4–5 clear groups and open space.
-- actionable_activities: false if most visible groups are idle (only sitting, standing, waiting, reading alone). true if most visible groups show a clear action or interaction in progress.`,
+- clear_composition: false if overcrowded, messy, chaotic, OR empty scene with no people (vacant patio, furniture only). true if simple readable cartoon with 5 clear groups of people and open space.
+- actionable_activities: false if no people visible, OR if most groups are idle/socializing/standing with nothing to describe. true if most visible groups show a clear purposeful action in progress.`,
             },
           ],
         },
@@ -97,7 +99,7 @@ ${countingRules}
       actionable_activities?: boolean;
       notes?: string;
     };
-    const count = Math.max(0, Math.min(5, Number(parsed.activity_count) || 0));
+    const count = Math.max(0, Math.min(6, Number(parsed.activity_count) || 0));
     const singleScene = parsed.single_scene !== false;
     const singleSnapshot = parsed.single_snapshot !== false;
     const activitiesDiverse = parsed.activities_diverse !== false;

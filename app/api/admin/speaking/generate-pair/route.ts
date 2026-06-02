@@ -17,7 +17,6 @@ import {
   buildTask34VisualPlan,
   buildTask3LockedContent,
   buildTask4LockedContent,
-  pickTask34Scene,
   pickTask5ScenePair,
   type Task34GenerationScript,
 } from "../../../../lib/speaking-image-style";
@@ -93,6 +92,16 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { pairType, difficulty } = body;
+    const chosen = body?.chosenCandidate as
+      | undefined
+      | {
+          image_url: string;
+          stability_prompt?: string;
+          stability_seed?: number;
+          scene_setting?: string;
+          scene_planned_by?: "llm" | "fallback" | "curated";
+          llm_scene_plan?: unknown;
+        };
     const authHeader = request.headers.get("Authorization");
     const token = authHeader?.replace("Bearer ", "") || "";
 
@@ -123,54 +132,68 @@ export async function POST(request: Request) {
     }
 
     if (pairType === "3+4") {
-      const scene = pickTask34Scene();
       const difficultyInstruction =
         difficultyInstructions[difficulty] || difficultyInstructions.medium;
 
-      console.log("Generating ONE square snapshot, 4-5 purposeful activities:", scene.setting);
-
-      const imageGen = await generateValidatedTask34Image(scene);
-      if (!imageGen.ok) {
-        warnings.push(`Task 3+4 image: ${imageGen.error}`);
-        return NextResponse.json({ error: imageGen.error, warnings }, { status: 500 });
+      const useChosen = Boolean(chosen?.image_url);
+      if (useChosen) {
+        console.log("Saving chosen Task 3/4 candidate image (batch selection)");
+      } else {
+        console.log("Generating ONE square snapshot (Task 3/4)");
       }
 
-      if (imageGen.validationWarning) {
-        warnings.push(`Task 3+4 image: ${imageGen.validationWarning} Saved best generated image.`);
-      } else if (imageGen.attempts > 1) {
-        warnings.push(
-          `Task 3+4 image: regenerated ${imageGen.attempts} times; vision counted ${imageGen.activityCount} independent activities.`,
-        );
+      const imageGen = useChosen ? null : await generateValidatedTask34Image();
+      if (!useChosen && (!imageGen || !imageGen.ok)) {
+        const err = imageGen && !imageGen.ok ? imageGen.error : "Task 3+4 image generation failed";
+        warnings.push(`Task 3+4 image: ${err}`);
+        return NextResponse.json({ error: err, warnings }, { status: 500 });
       }
 
-      if (!imageGen.base64) {
-        return NextResponse.json(
-          { error: "Task 3+4 image: empty image data", warnings },
-          { status: 500 },
-        );
-      }
+      const generated = imageGen && imageGen.ok ? imageGen : null;
+      const scene = generated?.scene;
 
-      const stabilityPrompt = imageGen.stabilityPrompt;
-      const stabilitySeed = imageGen.stabilitySeed;
-      const imageUrl = await uploadImage(imageGen.base64, `task34_${Date.now()}.png`);
+      const stabilityPrompt = useChosen
+        ? String(chosen?.stability_prompt || "")
+        : String(generated?.stabilityPrompt || "");
+      const stabilitySeed = useChosen
+        ? Number(chosen?.stability_seed || 0)
+        : Number(generated?.stabilitySeed || 0);
+
+      const imageUrl = useChosen
+        ? String(chosen!.image_url)
+        : await uploadImage(generated!.base64, `task34_${Date.now()}.png`);
       if (!imageUrl) {
-        warnings.push(
-          "Task 3+4: image generated but upload to Supabase failed. Check the task-images bucket.",
-        );
+        warnings.push("Task 3+4: image upload failed. Check the task-images bucket.");
         return NextResponse.json(
           { error: "Task 3+4 image upload failed", warnings },
           { status: 500 },
         );
       }
-      const imageResult = { url: imageUrl, base64: imageGen.base64 };
-      console.log("Image saved:", imageUrl);
 
-      const visualPlan = buildTask34VisualPlan(scene);
-      const predictionBrief = buildTask34PredictionBrief(scene);
+      const imageBase64 = useChosen ? await fetchImageBase64(imageUrl) : generated!.base64;
+      if (!imageBase64) {
+        return NextResponse.json(
+          { error: "Task 3+4 image: could not fetch image data", warnings },
+          { status: 500 },
+        );
+      }
+
+      console.log("Image ready:", imageUrl);
+
+      // If the chosen candidate didn't include a scene profile, fall back to using vision alignment only.
+      const fallbackScene = scene ?? {
+        setting: chosen?.scene_setting || "One public place",
+        focalPoints: [],
+        predictionHooks: [],
+        backgroundHint: "",
+      };
+
+      const visualPlan = buildTask34VisualPlan(fallbackScene);
+      const predictionBrief = buildTask34PredictionBrief(fallbackScene);
 
       const task4UserPrompt = buildTask4AuthoringPrompt({
-        task3Situation: scene.setting,
-        focalPoints: scene.focalPoints,
+        task3Situation: fallbackScene.setting,
+        focalPoints: fallbackScene.focalPoints,
         predictionBrief,
         pictureContext: visualPlan,
         difficulty,
@@ -178,11 +201,11 @@ export async function POST(request: Request) {
       });
 
       const [aligned, task4Sample, task4Response] = await Promise.all([
-        imageResult.base64
-          ? alignTask34ContentToImage(imageResult.base64, scene.focalPoints)
+        imageBase64
+          ? alignTask34ContentToImage(imageBase64, fallbackScene.focalPoints)
           : Promise.resolve(null),
-        imageResult.base64
-          ? alignTask4SampleToImage(imageResult.base64, scene.focalPoints)
+        imageBase64
+          ? alignTask4SampleToImage(imageBase64, fallbackScene.focalPoints)
           : Promise.resolve(null),
         client.messages.create({
           model: "claude-sonnet-4-6",
@@ -195,31 +218,33 @@ export async function POST(request: Request) {
       ]);
 
       const focalPoints =
-        aligned?.focal_points?.length && aligned.focal_points.length >= 4
+        aligned?.focal_points?.length && aligned.focal_points.length >= 3
           ? aligned.focal_points
-          : scene.focalPoints;
+          : fallbackScene.focalPoints;
 
-      if (aligned && aligned.focal_points.length < 4) {
+      if (aligned && aligned.focal_points.length < 3) {
         warnings.push(
-          `Task 3+4: vision saw only ${aligned.focal_points.length} separate activities; using planned ${scene.focalPoints.length}-activity script for describe/predict.`,
+          `Task 3+4: vision saw only ${aligned.focal_points.length} separate activities; using planned script for describe/predict.`,
         );
       }
 
       const generationScript: Task34GenerationScript = {
         requirement: SPEAKING_TASK34_REQUIREMENT.summary,
-        scene_setting: scene.setting,
+        scene_setting: fallbackScene.setting,
         focal_points: focalPoints,
-        prediction_hooks: scene.predictionHooks,
+        prediction_hooks: fallbackScene.predictionHooks,
         visual_plan: visualPlan,
         stability_prompt: stabilityPrompt,
-        stability_seed: stabilitySeed,
+        stability_seed: stabilitySeed || undefined,
         vision_description: aligned?.visual_description,
         task4_llm_prompt: task4UserPrompt,
+        llm_scene_plan: (useChosen ? (chosen?.llm_scene_plan as any) : (generated?.scenePlan as any)) ?? undefined,
+        scene_planned_by: (useChosen ? chosen?.scene_planned_by : generated?.scenePlannedBy) ?? undefined,
       };
 
       const task3: Record<string, unknown> = {
-        ...buildTask3LockedContent(scene),
-        situation: aligned?.situation ?? scene.setting,
+        ...buildTask3LockedContent(fallbackScene as any),
+        situation: aligned?.situation ?? fallbackScene.setting,
         describe_focus: focalPoints,
         visual_description: aligned?.visual_description ?? visualPlan,
         image_prompt: aligned?.visual_description ?? visualPlan,
@@ -228,11 +253,11 @@ export async function POST(request: Request) {
         sample_answer_notes: aligned
           ? [
               "Describes the generated image (vision-aligned)",
-              "Covers 4–5 purposeful activities in one simple scene",
+              "Covers 5 purposeful activities in one simple scene",
             ]
           : ["Vision alignment failed — regenerate if text does not match the picture"],
         image_url: imageUrl,
-        scene_profile: scene.setting,
+        scene_profile: fallbackScene.setting,
         image_grounded: Boolean(aligned),
         generation_script: generationScript,
       };
@@ -257,18 +282,17 @@ export async function POST(request: Request) {
       }
 
       const task4Locked = buildTask4LockedContent();
-      const task4 = {
+      const task4: Record<string, unknown> = {
         ...task4Locked,
         ...task4Llm,
         prompt: task4Locked.prompt,
+        image_url: imageUrl,
+        scene_profile: fallbackScene.setting,
+        image_grounded: Boolean(aligned),
+        describe_focus: focalPoints,
+        prediction_hooks: fallbackScene.predictionHooks,
+        generation_script: generationScript,
       };
-
-      task4.image_url = imageUrl;
-      task4.scene_profile = scene.setting;
-      task4.image_grounded = Boolean(aligned);
-      task4.describe_focus = focalPoints;
-      task4.prediction_hooks = scene.predictionHooks;
-      task4.generation_script = generationScript;
 
       if (task4Sample) {
         task4.sample_answer = task4Sample.sample_answer;
@@ -303,7 +327,9 @@ export async function POST(request: Request) {
         {
           task_type: "Speaking Task 3",
           difficulty,
-          title: task3.situation?.slice(0, 80) || "Speaking Task 3",
+          title:
+            (typeof task3.situation === "string" ? task3.situation.slice(0, 80) : null) ||
+            "Speaking Task 3",
           content: task3,
           section: "Speaking",
           sequence_number: 3,
@@ -312,7 +338,9 @@ export async function POST(request: Request) {
         {
           task_type: "Speaking Task 4",
           difficulty,
-          title: task4.situation?.slice(0, 80) || "Speaking Task 4",
+          title:
+            (typeof task4.situation === "string" ? task4.situation.slice(0, 80) : null) ||
+            "Speaking Task 4",
           content: task4,
           section: "Speaking",
           sequence_number: 4,
@@ -327,7 +355,7 @@ export async function POST(request: Request) {
           : "Task 3+4 pair generated with shared image!",
         group_id: group?.id,
         image_url: imageUrl,
-        scene: scene.setting,
+        scene: fallbackScene.setting,
         warnings,
       });
 

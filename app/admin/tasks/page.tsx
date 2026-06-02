@@ -193,6 +193,19 @@ function SpeakingGenerationScriptPanel({
           <div>
             <p className="font-medium text-gray-700">Scene</p>
             <p className="text-gray-600">{String(script.scene_setting)}</p>
+            {script?.scene_planned_by != null && (
+              <p className="text-xs text-gray-500 mt-1">
+                Planned by: {String(script.scene_planned_by)}
+              </p>
+            )}
+          </div>
+        )}
+        {script?.llm_scene_plan != null && (
+          <div>
+            <p className="font-medium text-gray-700">LLM scene plan (before Stability)</p>
+            <pre className="text-xs whitespace-pre-wrap text-gray-600 bg-white p-2 rounded border max-h-48 overflow-y-auto">
+              {JSON.stringify(script.llm_scene_plan, null, 2)}
+            </pre>
           </div>
         )}
         {script?.visual_plan_a != null && (
@@ -417,7 +430,9 @@ export default function TasksPage() {
             )
           : Boolean(taskContent.image_url);
       if (needsPicture && !hasPicture && imageWarnings.length === 0) {
-        imageWarnings.push("No image URL returned. Check STABILITY_API_KEY and Supabase task-images bucket.");
+        imageWarnings.push(
+          "No image URL returned. Check FAL_KEY or STABILITY_API_KEY (see SPEAKING_IMAGE_PROVIDER) and the Supabase task-images bucket.",
+        );
       }
     }
 
@@ -502,6 +517,86 @@ export default function TasksPage() {
     } finally {
       setGenerating(false);
       setTimeout(() => setMessage(""), 5000);
+    }
+  }
+
+  type Task34Candidate = {
+    image_url: string;
+    activity_count: number;
+    attempts: number;
+    validation_warning?: string;
+    stability_prompt: string;
+    stability_seed: number;
+    scene_setting: string;
+    scene_planned_by?: string;
+    llm_scene_plan?: any;
+  };
+
+  const [task34Candidates, setTask34Candidates] = useState<Task34Candidate[] | null>(null);
+  const [task34BatchWarnings, setTask34BatchWarnings] = useState<string[]>([]);
+
+  async function generateTask34Batch() {
+    setGenerating(true);
+    setMessage("");
+    setTask34Candidates(null);
+    setTask34BatchWarnings([]);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/speaking/generate-pair-batch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token || ""}`,
+        },
+        body: JSON.stringify({ batchSize: 5 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        setMessage("Error: " + (data.error || res.statusText));
+        return;
+      }
+      const cands: Task34Candidate[] = Array.isArray(data.candidates) ? data.candidates : [];
+      setTask34Candidates(cands);
+      setTask34BatchWarnings(Array.isArray(data.warnings) ? data.warnings : []);
+      setMessage(`Generated ${cands.length} candidate images. Choose one to save.`);
+    } catch {
+      setMessage("Something went wrong. Please try again.");
+    } finally {
+      setGenerating(false);
+      setTimeout(() => setMessage(""), 8000);
+    }
+  }
+
+  async function saveChosenTask34Candidate(cand: Task34Candidate) {
+    setGenerating(true);
+    setMessage("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/speaking/generate-pair", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token || ""}`,
+        },
+        body: JSON.stringify({
+          pairType: "3+4",
+          difficulty,
+          chosenCandidate: cand,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        setMessage("Error: " + (data.error || res.statusText));
+        return;
+      }
+      setMessage("Saved Task 3+4 pair from chosen image.");
+      setTask34Candidates(null);
+      await loadTasks();
+    } catch {
+      setMessage("Something went wrong. Please try again.");
+    } finally {
+      setGenerating(false);
+      setTimeout(() => setMessage(""), 8000);
     }
   }
 
@@ -613,7 +708,7 @@ export default function TasksPage() {
       {
         value: SPEAKING_PAIR_34,
         label: "Task 3 + 4 — Picture pair",
-        description: "One square image, 4–5 clear activities · describe + predict",
+        description: "One square image, 5 clear activities · describe + predict",
       },
       { value: "Speaking Task 5", label: "Task 5 — Compare Pictures", description: "30s prep, 60s speak" },
       { value: "Speaking Task 6", label: "Task 6 — Deal with a Situation", description: "60s prep, 60s speak" },
@@ -791,23 +886,98 @@ export default function TasksPage() {
 
   {/* Step 4 - Generate */}
   {taskType && (
-    <button
-      onClick={taskType === SPEAKING_PAIR_34 ? generateTaskPair : generateAndSaveTask}
-      disabled={generating}
-      className={`w-full font-semibold py-3 rounded-xl transition disabled:opacity-50 text-lg ${
-        taskType === SPEAKING_PAIR_34
-          ? "bg-purple-600 hover:bg-purple-700 text-white"
-          : "bg-blue-600 hover:bg-blue-700 text-white"
-      }`}
-    >
-      {generating
-        ? taskType === SPEAKING_PAIR_34
-          ? "⏳ Generating Task 3+4 pair..."
-          : "⏳ Generating..."
-        : taskType === SPEAKING_PAIR_34
-          ? "Generate Task 3+4 Pair"
-          : `Generate ${taskType}`}
-    </button>
+    <div className="space-y-2">
+      <button
+        onClick={taskType === SPEAKING_PAIR_34 ? generateTaskPair : generateAndSaveTask}
+        disabled={generating}
+        className={`w-full font-semibold py-3 rounded-xl transition disabled:opacity-50 text-lg ${
+          taskType === SPEAKING_PAIR_34
+            ? "bg-purple-600 hover:bg-purple-700 text-white"
+            : "bg-blue-600 hover:bg-blue-700 text-white"
+        }`}
+      >
+        {generating
+          ? taskType === SPEAKING_PAIR_34
+            ? "⏳ Generating Task 3+4 pair..."
+            : "⏳ Generating..."
+          : taskType === SPEAKING_PAIR_34
+            ? "Generate Task 3+4 Pair"
+            : `Generate ${taskType}`}
+      </button>
+
+      {taskType === SPEAKING_PAIR_34 && (
+        <button
+          onClick={generateTask34Batch}
+          disabled={generating}
+          className="w-full font-semibold py-3 rounded-xl transition disabled:opacity-50 text-lg bg-indigo-600 hover:bg-indigo-700 text-white"
+        >
+          {generating ? "⏳ Generating 5 candidates..." : "Generate 5 Candidates (Choose Best)"}
+        </button>
+      )}
+
+      {taskType === SPEAKING_PAIR_34 && task34Candidates && task34Candidates.length > 0 && (
+        <div className="border border-gray-200 rounded-xl p-3 bg-white">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold text-gray-800">Task 3/4 candidate images</p>
+              <p className="text-xs text-gray-600 mt-1">
+                Pick one image to save as the Task 3+4 pair (we will align Task 3/4 text to the chosen picture).
+              </p>
+              {task34BatchWarnings.length > 0 && (
+                <p className="text-xs text-amber-700 mt-2">
+                  Warnings: {task34BatchWarnings.join(" | ")}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setTask34Candidates(null)}
+              className="text-xs text-gray-600 hover:text-gray-900"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            {task34Candidates.map((cand, idx) => (
+              <div key={idx} className="border rounded-lg overflow-hidden bg-gray-50">
+                <div className="aspect-square bg-gray-100">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={cand.image_url}
+                    alt={`Candidate ${idx + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="p-3 text-xs text-gray-700 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-semibold">
+                      Candidate {idx + 1} — activities: {cand.activity_count}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => saveChosenTask34Candidate(cand)}
+                      className="px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white font-semibold"
+                    >
+                      Use this
+                    </button>
+                  </div>
+                  <div className="text-gray-600">
+                    {cand.scene_setting}
+                    {cand.scene_planned_by ? ` (planned: ${cand.scene_planned_by})` : ""}
+                  </div>
+                  {cand.validation_warning && (
+                    <div className="text-amber-700">
+                      Warning: {cand.validation_warning}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )}
 
   {/* Summary of selection */}
@@ -826,7 +996,7 @@ export default function TasksPage() {
       )}
       {taskType === SPEAKING_PAIR_34 && (
         <span className="block text-xs text-gray-600 mt-1">
-          Creates two linked tasks with one picture. May take 30–60 seconds.
+          Creates two linked tasks with one picture. Target: 5 clear activities. May take 30–90 seconds.
         </span>
       )}
     </div>

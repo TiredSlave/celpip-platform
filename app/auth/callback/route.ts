@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const type = searchParams.get("type");
   const code = searchParams.get("code");
 
-  // OAuth callback (Google / Apple)
+  // OAuth callback (Google)
   if (code) {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

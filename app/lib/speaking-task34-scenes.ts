@@ -1,7 +1,7 @@
 import type { Task34SceneProfile } from "./speaking-image-style";
 
 /**
- * Each profile = ONE scene with exactly 4–5 purposeful activities (simple, uncluttered).
+ * Each profile = ONE scene with exactly 5 purposeful activities (simple, uncluttered).
  * Every focal point must be an obvious ACTION or INTERACTION (not idle waiting/reading alone)
  * so Task 3 has plenty to describe and Task 4 has clear next-step predictions.
  */
@@ -9,20 +9,34 @@ export const SPEAKING_TASK34_SCENE_PROFILES: Task34SceneProfile[] = [
   {
     setting: "outdoor community swimming pool on a bright sunny summer day",
     focalPoints: [
-      "LEFT: Father in blue shorts kneeling on the deck helping a girl in a pink swimsuit put on orange arm floaties beside a gym bag and sunscreen bottle",
-      "CENTRE-LEFT: Female lifeguard in red swimsuit and white visor on a tall white chair blowing a whistle with a red rescue tube",
-      "CENTRE: Two boys in swim trunks captured mid-air jumping into the pool with a large white splash",
-      "CENTRE-RIGHT: Pool staff member in uniform mopping a puddle on the deck beside a yellow wet-floor sign",
-      "RIGHT: Elderly couple at a white table under a blue umbrella, woman eating an ice cream cone while man reads a newspaper",
+      "LEFT: Father kneeling helping a girl put on orange arm floaties on the pool deck",
+      "CENTRE-LEFT: Lifeguard standing on a chair blowing a whistle toward the diving board",
+      "CENTRE: Two boys mid-air jumping into the pool with a big splash",
+      "CENTRE-RIGHT: Pool staff member mopping a puddle beside a yellow wet-floor sign",
+      "RIGHT: Elderly woman eating an ice cream cone under a blue umbrella table",
     ],
     predictionHooks: [
       { id: "A", subject: "the father and daughter on the deck", visible_now: "putting on arm floaties", prediction_prompt: "whether the girl will jump in once the floaties are on" },
-      { id: "B", subject: "the lifeguard on the chair", visible_now: "watching swimmers and blowing a whistle", prediction_prompt: "whether she will warn someone about running on the deck" },
+      { id: "B", subject: "the lifeguard on the chair", visible_now: "blowing a whistle toward the board", prediction_prompt: "whether swimmers will stop diving until the area is clear" },
       { id: "C", subject: "the boys jumping", visible_now: "splashing into the water", prediction_prompt: "whether they will swim to the ladder right after landing" },
-      { id: "D", subject: "the staff member mopping", visible_now: "cleaning a puddle near the wet-floor sign", prediction_prompt: "whether a jogger will slip if they ignore the sign" },
-      { id: "E", subject: "the elderly couple at the table", visible_now: "resting with ice cream and a newspaper", prediction_prompt: "whether they will move into the shade when the sun shifts" },
+      { id: "D", subject: "the staff member mopping", visible_now: "cleaning a puddle near the wet-floor sign", prediction_prompt: "whether someone will walk around the sign safely" },
+      { id: "E", subject: "the elderly woman at the table", visible_now: "eating an ice cream cone", prediction_prompt: "whether she will move into the shade when the sun shifts" },
     ],
     backgroundHint: "chain-link fence and green trees",
+    stabilityLines: [
+      "father kneeling helping girl put on orange arm floaties on pool deck",
+      "lifeguard on chair blowing whistle toward diving board",
+      "two boys mid-air jumping into the pool with a big splash",
+      "staff member mopping puddle beside yellow wet-floor sign",
+      "elderly woman eating ice cream at umbrella table",
+    ],
+    slotCategories: [
+      "helping_child",
+      "teaching_demo",
+      "sport_physical",
+      "cleaning_maintenance",
+      "eating_drinking",
+    ],
   },
   {
     setting: "community recreation centre lobby and reception area",
@@ -207,20 +221,34 @@ export const SPEAKING_TASK34_SCENE_PROFILES: Task34SceneProfile[] = [
   {
     setting: "supermarket checkout area on a Saturday morning",
     focalPoints: [
-      "LEFT: Cashier scanning items while a customer packs reusable bags at the end of the belt",
-      "CENTRE-LEFT: Child pointing at candy while a parent shakes a head and redirects the cart",
-      "CENTRE: Store manager waving a cashier toward an empty lane to open it",
-      "CENTRE-RIGHT: Stock clerk lifting bread loaves from a rack into a shopper's cart",
-      "RIGHT: Senior showing a long receipt to a clerk while gesturing at an item in the cart",
+      "LEFT: Cashier scanning groceries while a customer packs reusable bags",
+      "CENTRE-LEFT: Toddler reaching for candy on a rack while parent unloads items onto the belt",
+      "CENTRE: Store manager waving a cashier to open an empty checkout lane",
+      "CENTRE-RIGHT: Stock clerk lifting bread loaves into a shopper's cart",
+      "RIGHT: Senior showing a long receipt to a clerk and pointing at an item",
     ],
     predictionHooks: [
-      { id: "A", subject: "the cashier and customer", visible_now: "finishing a large order", prediction_prompt: "whether the next customer will need a price check" },
-      { id: "B", subject: "the parent and child", visible_now: "debating a candy purchase", prediction_prompt: "whether the parent will buy a treat before leaving" },
+      { id: "A", subject: "the cashier and customer", visible_now: "scanning and packing groceries", prediction_prompt: "whether the next customer will need a price check" },
+      { id: "B", subject: "the toddler and parent at the belt", visible_now: "reaching for candy while unloading", prediction_prompt: "whether the parent will move the child away from the rack" },
       { id: "C", subject: "the manager", visible_now: "opening another lane", prediction_prompt: "whether the line will move faster after the lane opens" },
-      { id: "D", subject: "the stock clerk", visible_now: "helping a shopper with bread", prediction_prompt: "whether other shoppers will block the aisle with carts" },
-      { id: "E", subject: "the senior with the receipt", visible_now: "questioning a price", prediction_prompt: "whether they will return an item to the shelf" },
+      { id: "D", subject: "the stock clerk", visible_now: "loading bread into a cart", prediction_prompt: "whether another shopper will ask for help finding an item" },
+      { id: "E", subject: "the senior and clerk", visible_now: "checking a receipt and cart item", prediction_prompt: "whether they will return an item to the shelf" },
     ],
     backgroundHint: "checkout lanes, entrance doors, floral display in background",
+    stabilityLines: [
+      "cashier scanning groceries customer packing reusable bags",
+      "toddler reaching for candy rack parent unloading onto belt",
+      "manager waving cashier to open empty checkout lane",
+      "stock clerk lifting bread loaves into shopper cart",
+      "senior showing receipt to clerk pointing at cart item",
+    ],
+    slotCategories: [
+      "paying_serving",
+      "playing_games",
+      "teaching_demo",
+      "carrying_moving",
+      "shopping_trying",
+    ],
   },
   {
     setting: "indoor children's science museum exhibit hall (not outdoor)",
@@ -259,3 +287,14 @@ export const SPEAKING_TASK34_SCENE_PROFILES: Task34SceneProfile[] = [
     backgroundHint: "festival tents, string lights, Canadian flags",
   },
 ];
+
+/** Scenes with short Stability lines — pool and checkout only (avoid museum/library/rink). */
+export function getTask34TemplateScene(template: "pool" | "supermarket"): Task34SceneProfile {
+  if (template === "supermarket") {
+    const scene = SPEAKING_TASK34_SCENE_PROFILES.find((s) =>
+      /supermarket checkout/i.test(s.setting),
+    );
+    if (scene) return scene;
+  }
+  return SPEAKING_TASK34_SCENE_PROFILES[0];
+}
