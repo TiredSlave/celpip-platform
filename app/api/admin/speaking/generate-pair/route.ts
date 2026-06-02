@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { generateSpeakingImage } from "../../../../lib/speaking-image-generate";
 import {
   generateValidatedTask34Image,
@@ -32,10 +33,6 @@ import {
 } from "../../../../lib/speaking-task-pairs";
 
 const client = new Anthropic();
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const difficultyInstructions: Record<string, string> = {
   easy: "Use simple vocabulary. Predictions should be obvious next steps for each chosen activity.",
@@ -49,6 +46,7 @@ function generationSeed() {
 
 async function uploadImage(base64: string, filename: string): Promise<string | null> {
   try {
+    const supabase = createSupabaseAdmin();
     const buffer = Buffer.from(base64, "base64");
     const { error } = await supabase.storage
       .from("task-images")

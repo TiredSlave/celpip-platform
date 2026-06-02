@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdmin } from "../../../lib/supabase-admin";
 import {
   enrichSpeakingImagePromptForTask,
   SPEAKING_IMAGE_NEGATIVE_EXTRA,
@@ -11,10 +11,6 @@ import {
 } from "../../../lib/speaking-image-style";
 
 const client = new Anthropic();
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const taskDescriptions: Record<number, string> = {
   1: "Give advice to a friend about a situation",
@@ -77,6 +73,7 @@ async function uploadImageToSupabase(
   filename: string
 ): Promise<string | null> {
   try {
+    const supabase = createSupabaseAdmin();
     const buffer = Buffer.from(base64, "base64");
 
     const { error } = await supabase.storage

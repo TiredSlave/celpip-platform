@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { generateValidatedTask34Image } from "../../../../lib/speaking-task34-image";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
 
 async function uploadImage(base64: string, filename: string): Promise<string | null> {
   try {
+    const supabase = createSupabaseAdmin();
     const buffer = Buffer.from(base64, "base64");
     const { error } = await supabase.storage
       .from("task-images")

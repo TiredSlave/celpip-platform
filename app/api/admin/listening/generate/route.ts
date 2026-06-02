@@ -1,12 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdmin } from "../../../../lib/supabase-admin";
 
 const client = new Anthropic();
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 // Voice assignments per speaker role
 const VOICES = {
@@ -198,6 +194,7 @@ function concatenateAudioBuffers(buffers: Buffer[]): Buffer {
 // Upload combined MP3 to Supabase Storage
 async function uploadAudio(audioBuffer: Buffer, filename: string): Promise<string | null> {
   try {
+    const supabase = createSupabaseAdmin();
     const { error } = await supabase.storage
       .from("audio-files")
       .upload(filename, audioBuffer, {
