@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import PracticeBackLink from "../../components/PracticeBackLink";
 import { buildTaskPracticeHref, practiceListPath } from "../../lib/practice-navigation";
-import { supabase } from "../../lib/supabase";
 import {
   READING_PARTS,
   readingPartFilterLabel,
@@ -12,23 +11,22 @@ import {
   resolveReadingFilter,
   type ReadingFilter,
 } from "../../lib/reading-task-types";
-import { fetchReadingPracticeTasks } from "../../lib/reading-practice-tasks";
+import { fetchReadingPracticeTasks, type ReadingPracticeTask } from "../../lib/reading-practice-tasks";
 
-type Task = {
-  id: string;
-  task_type: string;
-  section?: string | null;
-  sequence_number?: number | null;
-  title: string;
-  content: any;
-  created_at: string;
-};
+function readingTaskContent(content: unknown): { title?: string; questions?: unknown[] } {
+  if (!content || typeof content !== "object") return {};
+  const c = content as { title?: string; questions?: unknown[] };
+  return {
+    title: typeof c.title === "string" ? c.title : undefined,
+    questions: Array.isArray(c.questions) ? c.questions : undefined,
+  };
+}
 
 function ReadingLibrary() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<ReadingPracticeTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>(() => searchParams.get("filter") || "all");
@@ -125,24 +123,27 @@ function ReadingLibrary() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {tasks.map(task => (
+            {tasks.map(task => {
+              const content = readingTaskContent(task.content);
+              return (
               <Link
                 key={task.id}
                 href={buildTaskPracticeHref("reading", task.id, listPath)}
                 className="group bg-white border border-green-100 rounded-xl p-6 hover:shadow-md transition-all hover:-translate-y-0.5"
               >
                 <span className="text-xs font-bold px-2 py-1 rounded-full bg-green-100 text-green-700">
-                  {readingPartLabel(task.task_type)}
+                  {readingPartLabel(task.task_type ?? "")}
                 </span>
                 <h3 className="font-bold text-gray-800 mt-3 mb-2 group-hover:text-green-600 transition">
-                  {task.content?.title || task.title || task.task_type}
+                  {content.title || task.title || task.task_type || "Reading task"}
                 </h3>
-                <p className="text-sm text-gray-600 mb-4">{task.content?.questions?.length || 0} questions</p>
+                <p className="text-sm text-gray-600 mb-4">{content.questions?.length || 0} questions</p>
                 <div className="flex items-center justify-end">
                   <span className="text-xs font-semibold text-green-600 group-hover:underline">Start Practice →</span>
                 </div>
               </Link>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>

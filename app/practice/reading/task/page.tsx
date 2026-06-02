@@ -157,7 +157,7 @@ function ReadingContent() {
         .order("created_at", { ascending: true });
       data = fallback.data;
     }
-    const latest: Partial<Record<string, ReadingTask>> = {};
+    const latest: Record<string, ReadingTask> = {};
     (data || []).forEach((t: ReadingTask) => {
       const num = partNumberFromRow(t);
       // Pick the newest available task for each reading part.
@@ -518,7 +518,7 @@ function ReadingContent() {
                     const match = part.match(/\[BLANK_(\d+)\]/);
                     if (match) {
                       const blankId = parseInt(match[1]);
-                      const blank = currentTask.content.fill_in_blank.blanks?.find((b: any) => b.id === blankId);
+                      const blank = currentTask.content.fill_in_blank?.blanks?.find((b: any) => b.id === blankId);
                       if (!blank) return <span key={idx}>{part}</span>;
                       const isCorrect = submitted && answers[blankId] === blank.correct_answer;
                       const isWrong = submitted && answers[blankId] && answers[blankId] !== blank.correct_answer;

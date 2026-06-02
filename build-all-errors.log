@@ -1,0 +1,98 @@
+
+> celpip-platform@0.1.0 build
+> next build
+
+▲ Next.js 16.2.4 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 4.6s
+  Running TypeScript ...
+  Finished TypeScript in 6.5s ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/71) ...
+  Generating static pages using 11 workers (17/71) 
+  Generating static pages using 11 workers (35/71) 
+  Generating static pages using 11 workers (53/71) 
+✓ Generating static pages using 11 workers (71/71) in 986ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /account/mock-history
+├ ○ /admin
+├ ○ /admin/mock-tests
+├ ○ /admin/tasks
+├ ○ /admin/users
+├ ○ /admin/vocabulary-speaking
+├ ƒ /api/admin/listening/generate
+├ ƒ /api/admin/mock-tests
+├ ƒ /api/admin/mock-tests/[id]
+├ ƒ /api/admin/reading/generate
+├ ƒ /api/admin/speaking/generate
+├ ƒ /api/admin/speaking/generate-pair
+├ ƒ /api/admin/speaking/generate-pair-batch
+├ ƒ /api/admin/speaking/image-provider-status
+├ ƒ /api/admin/tasks/[id]
+├ ƒ /api/admin/tasks/evaluate
+├ ƒ /api/admin/writing/generate
+├ ƒ /api/listening/evaluate
+├ ƒ /api/listening/generate
+├ ƒ /api/mock-tests
+├ ƒ /api/mock-tests/[id]
+├ ƒ /api/mock-tests/[id]/attempt
+├ ƒ /api/profile
+├ ƒ /api/reading/evaluate
+├ ƒ /api/reading/generate
+├ ƒ /api/reading/tasks
+├ ○ /api/speaking
+├ ƒ /api/speaking/evaluate
+├ ƒ /api/speaking/generate
+├ ƒ /api/support/chat
+├ ƒ /api/tasks/evaluate
+├ ƒ /api/tasks/generate
+├ ƒ /api/template-images/speaking-task-3
+├ ƒ /api/template-images/speaking-task-8
+├ ƒ /api/tts/generate
+├ ƒ /api/writing/evaluate
+├ ƒ /auth/callback
+├ ○ /dashboard
+├ ○ /forgot-password
+├ ○ /icon.svg
+├ ○ /login
+├ ○ /manifest.webmanifest
+├ ○ /mock-test
+├ ƒ /mock-test/[id]
+├ ƒ /mock-test/[id]/results
+├ ƒ /mock-test/[id]/review
+├ ƒ /mock-test/[id]/take
+├ ○ /opengraph-image
+├ ○ /practice
+├ ○ /practice/listening
+├ ○ /practice/listening/task
+├ ○ /practice/reading
+├ ○ /practice/reading/task
+├ ○ /practice/results
+├ ○ /practice/speaking
+├ ○ /practice/speaking/task
+├ ○ /practice/writing
+├ ○ /practice/writing/task
+├ ○ /profile
+├ ○ /reset-password
+├ ○ /robots.txt
+├ ○ /signup
+├ ○ /sitemap.xml
+├ ○ /templates
+├ ● /templates/[taskId]
+│ ├ /templates/writing-task-1
+│ ├ /templates/writing-task-2
+│ ├ /templates/speaking-task-1
+│ └ [+7 more paths]
+└ ○ /vocabulary
+
+
+○  (Static)   prerendered as static content
+●  (SSG)      prerendered as static HTML (uses generateStaticParams)
+ƒ  (Dynamic)  server-rendered on demand
+
