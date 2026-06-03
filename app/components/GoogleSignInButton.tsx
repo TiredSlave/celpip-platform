@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { getAuthCallbackUrl, setAuthRedirectNext } from "../lib/auth-url";
 import { supabase } from "../lib/supabase";
 
 export function GoogleSignInButton({ disabled }: { disabled?: boolean }) {
@@ -10,10 +11,15 @@ export function GoogleSignInButton({ disabled }: { disabled?: boolean }) {
   async function handleGoogleSignIn() {
     setLoading(true);
     setError("");
+    setAuthRedirectNext("/dashboard");
+    const redirectTo = getAuthCallbackUrl();
+    if (process.env.NODE_ENV === "development") {
+      console.info("[auth] OAuth redirectTo:", redirectTo);
+    }
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        redirectTo,
         queryParams: {
           access_type: "offline",
           prompt: "consent",

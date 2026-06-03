@@ -7,12 +7,8 @@ const nextConfig: NextConfig = {
       { source: "/writing", destination: "/practice/writing", permanent: false },
       { source: "/speaking", destination: "/practice/speaking", permanent: false },
       { source: "/listening", destination: "/practice/listening", permanent: false },
-    ];
-  },
-  async rewrites() {
-    return [
-      // Legacy /auth/callback URLs (Supabase, bookmarks) → API route handler
-      { source: "/auth/callback", destination: "/api/auth/callback" },
+      // Legacy Supabase redirect URLs
+      { source: "/api/auth/callback", destination: "/auth/callback", permanent: false },
     ];
   },
 };

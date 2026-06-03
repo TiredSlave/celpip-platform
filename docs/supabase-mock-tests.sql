@@ -1,5 +1,6 @@
 -- Mock test module: run in Supabase SQL editor
 -- Enforces single skill per mock, unique task assignment, and attempt tracking.
+-- If admin create fails with RLS errors, also run docs/supabase-mock-tests-rls.sql.
 
 -- 1) One skill per mock test
 ALTER TABLE mock_tests

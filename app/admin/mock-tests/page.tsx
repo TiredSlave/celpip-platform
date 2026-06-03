@@ -168,9 +168,18 @@ export default function MockTestsPage() {
   }, [skill, showBuilder, resetBuilder]);
 
   async function authHeaders(): Promise<HeadersInit> {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error || !session?.access_token) {
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      const token = refreshed.session?.access_token;
+      if (!token) throw new Error("Not signed in. Open /login and sign in again.");
+      return {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
+    }
     return {
-      Authorization: `Bearer ${session?.access_token || ""}`,
+      Authorization: `Bearer ${session.access_token}`,
       "Content-Type": "application/json",
     };
   }

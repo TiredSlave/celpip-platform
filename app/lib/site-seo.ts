@@ -3,13 +3,13 @@ import { SITE_DOMAIN, SITE_NAME, SITE_TAGLINE, SITE_DISCLAIMER } from "./brand";
 
 export { SITE_DOMAIN, SITE_NAME, SITE_TAGLINE, SITE_DISCLAIMER };
 
-/** Set in production: NEXT_PUBLIC_SITE_URL=https://celpiplib.com */
+/** Set in production: NEXT_PUBLIC_SITE_URL=https://www.celpiplib.com (apex redirects to www) */
 export function getSiteUrl(): string {
   const url = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (url) return url.replace(/\/$/, "");
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   if (process.env.NODE_ENV === "development") return "http://localhost:3000";
-  return "https://celpiplib.com";
+  return "https://www.celpiplib.com";
 }
 
 export const DEFAULT_DESCRIPTION =

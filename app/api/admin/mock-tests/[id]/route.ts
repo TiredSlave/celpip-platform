@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { getAdminDataClient } from "../../../../lib/supabase-admin";
 import { requireAdmin } from "../../../../lib/mock-test-auth";
 import { MOCK_TEST_SKILLS, type MockTestSkill } from "../../../../lib/mock-test-types";
 import { buildMockTestTaskRows, validateMockTestTaskIds } from "../../../../lib/mock-test-validate";
@@ -18,9 +18,9 @@ export async function GET(request: Request, { params }: Params) {
   if ("error" in gate) return gate.error;
 
   const { id } = await params;
-  const admin = createSupabaseAdmin();
+  const db = getAdminDataClient(gate);
 
-  const { data: test, error } = await admin
+  const { data: test, error } = await db
     .from("mock_tests")
     .select("*, mock_test_tasks(id, task_id, order_number, section, admin_tasks(id, task_type, title))")
     .eq("id", id)
@@ -49,9 +49,9 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const admin = createSupabaseAdmin();
+  const db = getAdminDataClient(gate);
 
-  const { data: existing, error: fetchErr } = await admin
+  const { data: existing, error: fetchErr } = await db
     .from("mock_tests")
     .select("id, test_type, title")
     .eq("id", id)
@@ -92,7 +92,7 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   if (Object.keys(updates).length > 0) {
-    const { error: updateErr } = await admin.from("mock_tests").update(updates).eq("id", id);
+    const { error: updateErr } = await db.from("mock_tests").update(updates).eq("id", id);
     if (updateErr) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
     }
@@ -100,7 +100,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
   if (body.task_ids !== undefined) {
     const taskIds = body.task_ids;
-    const validation = await validateMockTestTaskIds(admin, testType, taskIds, {
+    const validation = await validateMockTestTaskIds(db, testType, taskIds, {
       excludeMockTestId: id,
     });
     if (!validation.ok) {
@@ -108,13 +108,13 @@ export async function PATCH(request: Request, { params }: Params) {
     }
     const resolvedTaskIds = validation.taskIds;
 
-    const { error: deleteErr } = await admin.from("mock_test_tasks").delete().eq("mock_test_id", id);
+    const { error: deleteErr } = await db.from("mock_test_tasks").delete().eq("mock_test_id", id);
     if (deleteErr) {
       return NextResponse.json({ error: deleteErr.message }, { status: 500 });
     }
 
     const rows = buildMockTestTaskRows(id, testType, resolvedTaskIds);
-    const { error: linkErr } = await admin.from("mock_test_tasks").insert(rows);
+    const { error: linkErr } = await db.from("mock_test_tasks").insert(rows);
     if (linkErr) {
       const msg =
         linkErr.code === "23505"
@@ -124,7 +124,7 @@ export async function PATCH(request: Request, { params }: Params) {
     }
   }
 
-  const { data: updated } = await admin
+  const { data: updated } = await db
     .from("mock_tests")
     .select("*, mock_test_tasks(id, task_id, order_number, section, admin_tasks(id, task_type, title))")
     .eq("id", id)
