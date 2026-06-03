@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { getAdminDataClient } from "../../../../lib/supabase-admin";
+import {
+  getAdminDataClient,
+  requireServiceRoleDb,
+} from "../../../../lib/supabase-admin";
 import { requireAdmin } from "../../../../lib/mock-test-auth";
 import { MOCK_TEST_SKILLS, type MockTestSkill } from "../../../../lib/mock-test-types";
 import { buildMockTestTaskRows, validateMockTestTaskIds } from "../../../../lib/mock-test-validate";
@@ -49,7 +52,9 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const db = getAdminDataClient(gate);
+  const dbOrErr = requireServiceRoleDb();
+  if (dbOrErr instanceof Response) return dbOrErr;
+  const db = dbOrErr;
 
   const { data: existing, error: fetchErr } = await db
     .from("mock_tests")

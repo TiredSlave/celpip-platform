@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { getAdminDataClient } from "../../../lib/supabase-admin";
+import {
+  getAdminDataClient,
+  requireServiceRoleDb,
+} from "../../../lib/supabase-admin";
 import { requireAdmin } from "../../../lib/mock-test-auth";
 import { MOCK_TEST_SKILLS, type MockTestSkill } from "../../../lib/mock-test-types";
 import { buildMockTestTaskRows, validateMockTestTaskIds } from "../../../lib/mock-test-validate";
@@ -56,7 +59,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid test_type." }, { status: 400 });
   }
 
-  const db = getAdminDataClient(gate);
+  const dbOrErr = requireServiceRoleDb();
+  if (dbOrErr instanceof Response) return dbOrErr;
+  const db = dbOrErr;
 
   const validation = await validateMockTestTaskIds(db, testType, taskIds);
   if (!validation.ok) {
@@ -77,20 +82,8 @@ export async function POST(request: Request) {
     .single();
 
   if (insertErr || !inserted) {
-    let hint = "";
-    if (insertErr?.message?.includes("row-level security")) {
-      const { data: profile } = await gate.supabase
-        .from("profiles")
-        .select("is_admin")
-        .eq("id", gate.user.id)
-        .single();
-      hint =
-        ` Re-run docs/supabase-mock-tests-rls.sql in Supabase.` +
-        ` Your profile is_admin=${String(profile?.is_admin ?? false)} (must be true).` +
-        ` If using Option B, remove SUPABASE_SERVICE_ROLE_KEY from .env.local or leave ADMIN_API_USE_SERVICE_ROLE unset.`;
-    }
     return NextResponse.json(
-      { error: (insertErr?.message || "Failed to create mock test.") + hint },
+      { error: insertErr?.message || "Failed to create mock test." },
       { status: 500 },
     );
   }
