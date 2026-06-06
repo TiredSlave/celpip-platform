@@ -208,13 +208,30 @@ export default function MockTestsPage() {
 
   async function loadTestTasks(testId: string) {
     setLoadingTestTasks(true);
-    const { data } = await supabase
-      .from("mock_test_tasks")
-      .select("*, admin_tasks(*)")
-      .eq("mock_test_id", testId)
-      .order("order_number");
-    setTestTasks(data || []);
-    setLoadingTestTasks(false);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`/api/admin/mock-tests/${testId}`, { headers });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setTestTasks([]);
+        setMessage(
+          "Error: " +
+            (json.error ||
+              `Could not load tasks for this mock (${res.status}). Check SUPABASE_SERVICE_ROLE_KEY on Vercel.`),
+        );
+        setTimeout(() => setMessage(""), 6000);
+        return;
+      }
+      const rows = (json.test?.mock_test_tasks || []) as MockTestTask[];
+      rows.sort((a, b) => a.order_number - b.order_number);
+      setTestTasks(rows);
+    } catch {
+      setTestTasks([]);
+      setMessage("Error: Could not load tasks for this mock.");
+      setTimeout(() => setMessage(""), 5000);
+    } finally {
+      setLoadingTestTasks(false);
+    }
   }
 
   async function createMockTest() {
@@ -256,7 +273,8 @@ export default function MockTestsPage() {
     if (!res.ok) {
       setMessage("Error: " + (json.error || res.statusText));
     } else {
-      setMessage(`Created mock test "${title.trim()}".`);
+      const count = typeof json.task_count === "number" ? json.task_count : picks.length;
+      setMessage(`Created mock test "${title.trim()}" with ${count} linked task(s).`);
       setShowBuilder(false);
       resetBuilder();
       await loadAll();

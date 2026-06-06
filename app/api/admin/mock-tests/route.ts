@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  getAdminDataClient,
-  requireServiceRoleDb,
-} from "../../../lib/supabase-admin";
+import { requireServiceRoleDb } from "../../../lib/supabase-admin";
 import { requireAdmin } from "../../../lib/mock-test-auth";
 import { MOCK_TEST_SKILLS, type MockTestSkill } from "../../../lib/mock-test-types";
 import { buildMockTestTaskRows, validateMockTestTaskIds } from "../../../lib/mock-test-validate";
@@ -23,7 +20,10 @@ export async function GET(request: Request) {
   const order = (searchParams.get("order") || "asc").toLowerCase();
   const ascending = order !== "desc";
 
-  const db = getAdminDataClient(gate);
+  const dbOrErr = requireServiceRoleDb();
+  if (dbOrErr instanceof Response) return dbOrErr;
+  const db = dbOrErr;
+
   const { data: tests, error } = await db
     .from("mock_tests")
     .select("*, mock_test_tasks(id, task_id, order_number, section)")
@@ -100,5 +100,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: msg }, { status: 409 });
   }
 
-  return NextResponse.json({ id: inserted.id, title, test_type: testType });
+  return NextResponse.json({
+    id: inserted.id,
+    title,
+    test_type: testType,
+    task_count: rows.length,
+  });
 }

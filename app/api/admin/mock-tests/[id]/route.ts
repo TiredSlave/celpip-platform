@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  getAdminDataClient,
-  requireServiceRoleDb,
-} from "../../../../lib/supabase-admin";
+import { requireServiceRoleDb } from "../../../../lib/supabase-admin";
 import { requireAdmin } from "../../../../lib/mock-test-auth";
 import { MOCK_TEST_SKILLS, type MockTestSkill } from "../../../../lib/mock-test-types";
 import { buildMockTestTaskRows, validateMockTestTaskIds } from "../../../../lib/mock-test-validate";
@@ -22,7 +19,9 @@ export async function GET(request: Request, { params }: Params) {
   if ("error" in gate) return gate.error;
 
   const { id } = await params;
-  const db = getAdminDataClient(gate);
+  const dbOrErr = requireServiceRoleDb();
+  if (dbOrErr instanceof Response) return dbOrErr;
+  const db = dbOrErr;
 
   const { data: test, error } = await db
     .from("mock_tests")
