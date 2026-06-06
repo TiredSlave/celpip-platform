@@ -1,8 +1,8 @@
 "use client";
 
 import { VocabularySelectableText } from "../VocabularySelectableText";
-import { ReadingLabeledPassage } from "../../../components/reading/ReadingLabeledPassage";
-import { ReadingMcqOptions } from "../../../components/reading/ReadingMcqOptions";
+import { ReadingLabeledPassage } from "../reading/ReadingLabeledPassage";
+import { ReadingMcqOptions } from "../reading/ReadingMcqOptions";
 import { partNumberFromRow, readingPartLabel } from "../../lib/reading-task-types";
 import { readingQuestionPrompt } from "../../lib/reading-part3-questions";
 
