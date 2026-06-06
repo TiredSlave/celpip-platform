@@ -14,6 +14,7 @@ type PatchBody = {
   description?: string | null;
   time_limit_minutes?: number;
   task_ids?: string[];
+  is_published?: boolean;
 };
 
 export async function GET(request: Request, { params }: Params) {
@@ -96,6 +97,10 @@ export async function PATCH(request: Request, { params }: Params) {
     updates.time_limit_minutes = minutes;
   }
 
+  if (body.is_published !== undefined) {
+    updates.is_published = Boolean(body.is_published);
+  }
+
   if (Object.keys(updates).length > 0) {
     const { error: updateErr } = await db.from("mock_tests").update(updates).eq("id", id);
     if (updateErr) {
@@ -136,4 +141,19 @@ export async function PATCH(request: Request, { params }: Params) {
     .single();
 
   return NextResponse.json({ test: updated });
+}
+
+export async function DELETE(request: Request, { params }: Params) {
+  const gate = await requireAdmin(request);
+  if ("error" in gate) return gate.error;
+
+  const { id } = await params;
+  const dbOrErr = requireServiceRoleDb();
+  if (dbOrErr instanceof Response) return dbOrErr;
+  const db = dbOrErr;
+
+  const { error } = await db.from("mock_tests").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
 }

@@ -303,20 +303,36 @@ export default function MockTestsPage() {
   }
 
   async function togglePublish(test: MockTest) {
-    const { error } = await supabase
-      .from("mock_tests")
-      .update({ is_published: !test.is_published })
-      .eq("id", test.id);
-    setMessage(error ? "Error: " + error.message : test.is_published ? "Unpublished." : "Published.");
+    const headers = await authHeaders();
+    const res = await fetch(`/api/admin/mock-tests/${test.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ is_published: !test.is_published }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMessage("Error: " + (json.error || res.statusText));
+    } else {
+      setMessage(test.is_published ? "Unpublished." : "Published.");
+    }
     await loadAll();
     setTimeout(() => setMessage(""), 3000);
   }
 
   async function deleteTest(testId: string) {
     if (!confirm("Delete this mock test? Tasks will become available for other mocks.")) return;
-    const { error } = await supabase.from("mock_tests").delete().eq("id", testId);
-    setMessage(error ? "Error: " + error.message : "Mock test deleted.");
-    if (selectedTest?.id === testId) setSelectedTest(null);
+    const headers = await authHeaders();
+    const res = await fetch(`/api/admin/mock-tests/${testId}`, {
+      method: "DELETE",
+      headers,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMessage("Error: " + (json.error || res.statusText));
+    } else {
+      setMessage("Mock test deleted.");
+      if (selectedTest?.id === testId) setSelectedTest(null);
+    }
     await loadAll();
     setTimeout(() => setMessage(""), 3000);
   }
