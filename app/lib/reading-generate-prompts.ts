@@ -35,24 +35,42 @@ export function buildReadingPart3QuestionsPrompt(
   passage: string,
   questionCount: number,
 ): string {
-  return `Generate ONLY the multiple-choice questions for CELPIP Reading Part 3.
+  return `Generate ONLY the multiple-choice questions for CELPIP Reading Part 3 (Reading for Information).
 
 Title: ${title}
 
-Passage:
+Passage (paragraphs A, B, C, D):
 ${passage}
 
-Generate exactly ${questionCount} questions (ids 1–${questionCount}). Mix: direct detail, inference, vocabulary in context, main idea.
+CELPIP Part 3 format (follow exactly):
+- Generate exactly ${questionCount} questions (ids 1–${questionCount}).
+- Each question is a STATEMENT (not a question with a "?"). Example: "The writer describes how local schools adapted their programs."
+- Each question has exactly 5 options A, B, C, D, E:
+  - A = the information appears in paragraph A
+  - B = the information appears in paragraph B
+  - C = the information appears in paragraph C
+  - D = the information appears in paragraph D
+  - E = "Information is not given in any paragraph" (use this exact wording for option E on every question)
+- For options A–D use short labels: "Paragraph A", "Paragraph B", "Paragraph C", "Paragraph D".
+- Exactly 2 or 3 questions must have correct_answer "E" (the statement is NOT supported by any paragraph).
+- The remaining questions must have correct_answer "A", "B", "C", or "D" matching where the information actually appears.
+- Do not make every answer E; most answers should be A–D.
 
 Return ONLY raw JSON:
 {
   "questions": [
     {
       "id": 1,
-      "question": "question text",
-      "options": {"A": "option", "B": "option", "C": "option", "D": "option"},
-      "correct_answer": "A",
-      "explanation": "where in the passage this answer is found"
+      "question": "statement about the passage",
+      "options": {
+        "A": "Paragraph A",
+        "B": "Paragraph B",
+        "C": "Paragraph C",
+        "D": "Paragraph D",
+        "E": "Information is not given in any paragraph"
+      },
+      "correct_answer": "B",
+      "explanation": "Paragraph B discusses …; E would apply only if no paragraph mentions this."
     }
   ]
 }`;

@@ -7,7 +7,7 @@ import { navigatePracticeTask } from "../../../lib/practice-task-nav";
 import { usePracticeTaskSiblings } from "../../../lib/use-practice-task-siblings";
 import { PracticeTaskTypeDropdown } from "../../../components/PracticeTaskTypeDropdown";
 import { finishMockPracticePart, parseMockPracticeParams, remainingMockSeconds } from "../../../lib/mock-test-practice";
-import { formatMockTime } from "../../../lib/mock-test-times";
+import { formatMockTime, formatPracticeTime } from "../../../lib/mock-test-times";
 import { VocabularySelectableText } from "../../../components/VocabularySelectableText";
 declare global { interface Window { __currentAudio?: HTMLAudioElement; } }
 type Question = {
@@ -399,24 +399,17 @@ function ListeningContent() {
 
   useEffect(() => {
     if (answerTimerRef.current) clearInterval(answerTimerRef.current);
-    if (!currentTask || answerTimeLeft <= 0) return;
+    if (!currentTask || mockParams) return;
     if (screen !== "question") return;
 
     answerTimerRef.current = setInterval(() => {
-      setAnswerTimeLeft(t => {
-        if (t <= 1) {
-          if (answerTimerRef.current) clearInterval(answerTimerRef.current);
-          handleAnswerTimeExpired();
-          return 0;
-        }
-        return t - 1;
-      });
+      setAnswerTimeLeft(t => t - 1);
     }, 1000);
 
     return () => {
       if (answerTimerRef.current) clearInterval(answerTimerRef.current);
     };
-  }, [currentTask, currentPartIndex, screen, answerTimeLeft]);
+  }, [currentTask, currentPartIndex, screen, mockParams]);
 
   async function loadTasks() {
     setLoading(true);
@@ -476,9 +469,7 @@ function ListeningContent() {
   }
 
   function formatCountdown(seconds: number) {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, "0")}`;
+    return formatPracticeTime(seconds);
   }
 
   function getCurrentQuestions() {
@@ -502,14 +493,6 @@ function ListeningContent() {
 
   function stopAllAudio() {
     document.querySelectorAll("audio").forEach(a => { a.pause(); a.currentTime = 0; });
-  }
-
-  function handleAnswerTimeExpired() {
-    if (LISTENING_PARTS[currentPartIndex].onePerPage) {
-      handleNextQuestion();
-      return;
-    }
-    handleSubmit();
   }
 
   function handleNextQuestion() {

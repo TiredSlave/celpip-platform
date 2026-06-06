@@ -39,29 +39,53 @@ end $$;
 -- ---------------------------------------------------------------------------
 create or replace function public.is_admin()
 returns boolean
-language plpgsql
+language sql
 security definer
 set search_path = public
 stable
 as $$
-declare
-  admin_flag boolean;
-begin
-  select coalesce(p.is_admin, false)
-    into admin_flag
-  from public.profiles p
-  where p.id = auth.uid()
-  limit 1;
-
-  return coalesce(admin_flag, false);
-end;
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and (
+        p.is_admin is true
+        or lower(trim(coalesce(p.is_admin::text, ''))) in ('true', 't', 'yes', '1')
+      )
+  );
 $$;
 
 revoke all on function public.is_admin() from public;
 grant execute on function public.is_admin() to authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
--- 3) Table grants (Data API)
+-- 3) profiles: own row + admins can read all (for /admin/users)
+-- ---------------------------------------------------------------------------
+grant select on public.profiles to authenticated;
+
+alter table public.profiles enable row level security;
+
+drop policy if exists "profiles_select_own" on public.profiles;
+create policy "profiles_select_own"
+  on public.profiles for select
+  to authenticated
+  using (id = auth.uid());
+
+drop policy if exists "profiles_admin_select" on public.profiles;
+create policy "profiles_admin_select"
+  on public.profiles for select
+  to authenticated
+  using (public.is_admin());
+
+drop policy if exists "profiles_update_own" on public.profiles;
+create policy "profiles_update_own"
+  on public.profiles for update
+  to authenticated
+  using (id = auth.uid())
+  with check (id = auth.uid());
+
+-- ---------------------------------------------------------------------------
+-- 4) Table grants (Data API)
 -- ---------------------------------------------------------------------------
 grant select on public.mock_tests to anon, authenticated;
 grant select, insert, update, delete on public.mock_tests to authenticated;
@@ -79,7 +103,7 @@ alter table public.mock_test_tasks enable row level security;
 alter table public.mock_test_attempts enable row level security;
 
 -- ---------------------------------------------------------------------------
--- 4) mock_tests policies
+-- 5) mock_tests policies
 -- ---------------------------------------------------------------------------
 create policy "mock_tests_select_published"
   on public.mock_tests for select
@@ -94,7 +118,18 @@ create policy "mock_tests_admin_select"
 create policy "mock_tests_admin_insert"
   on public.mock_tests for insert
   to authenticated
-  with check (public.is_admin());
+  with check (
+    public.is_admin()
+    or exists (
+      select 1
+      from public.profiles p
+      where p.id = auth.uid()
+        and (
+          p.is_admin is true
+          or lower(trim(coalesce(p.is_admin::text, ''))) in ('true', 't', 'yes', '1')
+        )
+    )
+  );
 
 create policy "mock_tests_admin_update"
   on public.mock_tests for update
@@ -108,7 +143,7 @@ create policy "mock_tests_admin_delete"
   using (public.is_admin());
 
 -- ---------------------------------------------------------------------------
--- 5) mock_test_tasks policies
+-- 6) mock_test_tasks policies
 -- ---------------------------------------------------------------------------
 create policy "mock_test_tasks_select_published"
   on public.mock_test_tasks for select
@@ -144,7 +179,7 @@ create policy "mock_test_tasks_admin_delete"
   using (public.is_admin());
 
 -- ---------------------------------------------------------------------------
--- 6) mock_test_attempts policies
+-- 7) mock_test_attempts policies
 -- ---------------------------------------------------------------------------
 create policy "mock_test_attempts_own"
   on public.mock_test_attempts for all

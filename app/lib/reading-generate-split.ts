@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ensureReadingPassageLabels } from "./reading-passage-format";
 import { parseLlmJsonWithRepair } from "./reading-llm-json";
+import { normalizeReadingPart3Options } from "./reading-part3-questions";
 import {
   buildReadingPart3PassagePrompt,
   buildReadingPart3QuestionsPrompt,
@@ -73,12 +74,26 @@ export async function generateReadingPart3(
     questionsText,
   );
 
+  const rawQuestions = Array.isArray(questionsPart.questions) ? questionsPart.questions : [];
+  const questions = rawQuestions.map((q, i) => {
+    const row = q as Record<string, unknown>;
+    const options = normalizeReadingPart3Options(
+      row.options as Record<string, string> | undefined,
+    );
+    return {
+      ...row,
+      id: typeof row.id === "number" ? row.id : i + 1,
+      options,
+      correct_answer: String(row.correct_answer ?? "A"),
+    };
+  });
+
   return {
     reading_type: "Reading for Information",
     time_limit_minutes: passagePart.time_limit_minutes ?? 10,
     title: passagePart.title,
     passage: passagePart.passage,
-    questions: questionsPart.questions ?? [],
+    questions,
   };
 }
 

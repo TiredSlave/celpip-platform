@@ -698,7 +698,7 @@ export default function TasksPage() {
     options.push(
       { value: "task 1", label: "Part 1 — Correspondence", description: "Email/letter ~150–250 words" },
       { value: "task 2", label: "Part 2 — Apply Information", description: "Use info to complete a task" },
-      { value: "task 3", label: "Part 3 — Reading for Information", description: "4 ¶ labeled A–D · ~300–450 words" },
+      { value: "task 3", label: "Part 3 — Reading for Information", description: "4 ¶ A–D · 9 MCQ (A–E; 2–3 answers E = not in passage)" },
       { value: "task 4", label: "Part 4 — Viewpoints", description: "4 ¶ labeled A–D · ~350–500 words" },
     );
   } else if (module === "Speaking") {

@@ -14,7 +14,7 @@ export type ReadingFilter = "all" | ReadingTaskTypeKey;
 export const READING_PARTS = [
   { key: "task 1" as const, partNumber: 1, label: "Part 1", title: "Correspondence", aiReadingType: "Reading Correspondence", instruction: "Read the following message", timeMinutes: 11, questionCount: 11 },
   { key: "task 2" as const, partNumber: 2, label: "Part 2", title: "Apply Information", aiReadingType: "Reading to Apply Information", instruction: "Read the following information", timeMinutes: 9, questionCount: 8 },
-  { key: "task 3" as const, partNumber: 3, label: "Part 3", title: "Reading for Information", aiReadingType: "Reading for Information", instruction: "Read the following passage", timeMinutes: 10, questionCount: 9 },
+  { key: "task 3" as const, partNumber: 3, label: "Part 3", title: "Reading for Information", aiReadingType: "Reading for Information", instruction: "Decide which paragraph, A to D, has the information in each statement. Select E if not given in any paragraph.", timeMinutes: 10, questionCount: 9 },
   { key: "task 4" as const, partNumber: 4, label: "Part 4", title: "Viewpoints", aiReadingType: "Reading for Viewpoints", instruction: "Read the following viewpoints", timeMinutes: 13, questionCount: 10 },
 ] as const;
 

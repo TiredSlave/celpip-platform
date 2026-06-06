@@ -147,9 +147,95 @@ function TakeContent() {
     [attempt, mockId, order, router, totalParts],
   );
 
+  const finishWritingPart = useCallback(
+    async (opts?: { fromTimer?: boolean }) => {
+      if (!currentSlot || skill !== "Writing") return;
+      if (!opts?.fromTimer) {
+        if (!writingResponse.trim()) {
+          alert("Please enter a response before continuing.");
+          return;
+        }
+        if (currentSlot.admin_tasks.task_type === "Writing Task 2" && !task2Choice) {
+          alert("Select Option A or B for Task 2.");
+          return;
+        }
+      }
+
+      setEvaluating(true);
+      const c = currentSlot.admin_tasks.content as {
+        option_a?: string;
+        option_b?: string;
+        opinion_options?: string[];
+      };
+      const textA = c.option_a ?? c.opinion_options?.[0] ?? "";
+      const textB = c.option_b ?? c.opinion_options?.[1] ?? "";
+      const chosenLabel = task2Choice === "A" ? textA : task2Choice === "B" ? textB : "";
+
+      try {
+        if (writingResponse.trim()) {
+          const res = await fetch("/api/writing/evaluate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              taskType: currentSlot.admin_tasks.task_type,
+              content: currentSlot.admin_tasks.content,
+              response: writingResponse,
+              ...(task2Choice
+                ? { selectedOption: task2Choice, chosenOptionText: chosenLabel }
+                : {}),
+            }),
+          });
+          const data = await res.json();
+          const band = typeof data.band === "number" ? data.band : Number(data.band) || 0;
+          await finishPart({
+            taskId: currentSlot.task_id,
+            taskType: currentSlot.admin_tasks.task_type,
+            answers: {},
+            studentResponse: writingResponse,
+            writingTask2Choice: task2Choice ?? undefined,
+            writingTask2ChosenLabel: chosenLabel || undefined,
+            feedback: data,
+            score: band,
+            total: 12,
+            completedAt: new Date().toISOString(),
+          });
+        } else {
+          await finishPart({
+            taskId: currentSlot.task_id,
+            taskType: currentSlot.admin_tasks.task_type,
+            answers: {},
+            studentResponse: writingResponse,
+            writingTask2Choice: task2Choice ?? undefined,
+            score: 0,
+            total: 12,
+            completedAt: new Date().toISOString(),
+          });
+        }
+      } catch {
+        if (opts?.fromTimer) {
+          await finishPart({
+            taskId: currentSlot.task_id,
+            taskType: currentSlot.admin_tasks.task_type,
+            answers: {},
+            studentResponse: writingResponse,
+            writingTask2Choice: task2Choice ?? undefined,
+            score: 0,
+            total: 12,
+            completedAt: new Date().toISOString(),
+          });
+        } else {
+          alert("Evaluation failed. Try again or wait for the timer to auto-advance.");
+        }
+      } finally {
+        setEvaluating(false);
+      }
+    },
+    [currentSlot, finishPart, skill, task2Choice, writingResponse],
+  );
+
   const handleExpire = useCallback(() => {
     void (async () => {
-      if (!currentSlot || !skill) return;
+      if (!currentSlot || !skill || saving || evaluating) return;
       if (skill === "Reading") {
         const content = currentSlot.admin_tasks.content;
         const { score, total } = scoreReadingTask(content, answers);
@@ -162,21 +248,16 @@ function TakeContent() {
           completedAt: new Date().toISOString(),
         });
       } else if (skill === "Writing") {
-        await finishPart({
-          taskId: currentSlot.task_id,
-          taskType: currentSlot.admin_tasks.task_type,
-          answers: {},
-          studentResponse: writingResponse,
-          writingTask2Choice: task2Choice ?? undefined,
-          score: 0,
-          total: 12,
-          completedAt: new Date().toISOString(),
-        });
+        await finishWritingPart({ fromTimer: true });
       }
     })();
-  }, [answers, currentSlot, finishPart, skill, task2Choice, writingResponse]);
+  }, [answers, currentSlot, evaluating, finishPart, finishWritingPart, saving, skill]);
 
-  const { timeLeft } = useStrictCountdown(partSeconds, Boolean(currentSlot && !saving), handleExpire);
+  const { timeLeft } = useStrictCountdown(
+    partSeconds,
+    Boolean(currentSlot && !saving && !evaluating),
+    handleExpire,
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -272,54 +353,7 @@ function TakeContent() {
     }
 
     if (skill === "Writing") {
-      if (!writingResponse.trim()) {
-        alert("Please enter a response before continuing.");
-        return;
-      }
-      if (currentSlot.admin_tasks.task_type === "Writing Task 2" && !task2Choice) {
-        alert("Select Option A or B for Task 2.");
-        return;
-      }
-      setEvaluating(true);
-      const c = currentSlot.admin_tasks.content as {
-        option_a?: string;
-        option_b?: string;
-        opinion_options?: string[];
-      };
-      const textA = c.option_a ?? c.opinion_options?.[0] ?? "";
-      const textB = c.option_b ?? c.opinion_options?.[1] ?? "";
-      const chosenLabel = task2Choice === "A" ? textA : task2Choice === "B" ? textB : "";
-      try {
-        const res = await fetch("/api/writing/evaluate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            taskType: currentSlot.admin_tasks.task_type,
-            content: currentSlot.admin_tasks.content,
-            response: writingResponse,
-            ...(task2Choice
-              ? { selectedOption: task2Choice, chosenOptionText: chosenLabel }
-              : {}),
-          }),
-        });
-        const data = await res.json();
-        const band = typeof data.band === "number" ? data.band : Number(data.band) || 0;
-        await finishPart({
-          taskId: currentSlot.task_id,
-          taskType: currentSlot.admin_tasks.task_type,
-          answers: {},
-          studentResponse: writingResponse,
-          writingTask2Choice: task2Choice ?? undefined,
-          writingTask2ChosenLabel: chosenLabel || undefined,
-          feedback: data,
-          score: band,
-          total: 12,
-          completedAt: new Date().toISOString(),
-        });
-      } catch {
-        alert("Evaluation failed. Try again or wait for the timer to auto-advance.");
-      }
-      setEvaluating(false);
+      await finishWritingPart();
     }
   }
 

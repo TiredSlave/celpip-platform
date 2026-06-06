@@ -1,13 +1,15 @@
 "use client";
 
 import { VocabularySelectableText } from "../VocabularySelectableText";
-import { ReadingLabeledPassage } from "../reading/ReadingLabeledPassage";
+import { ReadingLabeledPassage } from "../../../components/reading/ReadingLabeledPassage";
+import { ReadingMcqOptions } from "../../../components/reading/ReadingMcqOptions";
 import { partNumberFromRow, readingPartLabel } from "../../lib/reading-task-types";
+import { readingQuestionPrompt } from "../../lib/reading-part3-questions";
 
 type Question = {
   id: number;
   question: string;
-  options: { A: string; B: string; C: string; D: string };
+  options: Record<string, string>;
   correct_answer: string;
   explanation: string;
 };
@@ -203,7 +205,10 @@ export default function MockReadingPanel({
       {/* RIGHT — Questions (independent scroll) */}
       <div className="w-1/2 min-h-0 overflow-y-auto bg-gray-50 p-6 sm:p-8">
         <h2 className="text-xl font-bold text-gray-900 mb-6">
-          Choose the best option according to the information given in the message:
+          {readingQuestionPrompt(
+            partNum,
+            "Choose the best option according to the information given in the message:",
+          )}
         </h2>
         <div className="space-y-8">
           {content.questions?.map((q, i) => (
@@ -211,39 +216,16 @@ export default function MockReadingPanel({
               <p className="text-sm font-semibold text-gray-900 mb-3">
                 {i + 1}. {q.question}
               </p>
-              <div className="space-y-2">
-                {(["A", "B", "C", "D"] as const).map(opt => {
-                  const isSelected = answers[q.id] === opt;
-                  const showCorrect = showFeedback && opt === q.correct_answer;
-                  const showWrong = showFeedback && isSelected && !showCorrect;
-                  return (
-                    <button
-                      key={`${q.id}-${opt}`}
-                      type="button"
-                      disabled={readOnly}
-                      onClick={() => onAnswer(q.id, opt)}
-                      className={`w-full text-left px-4 py-3 rounded-lg border text-sm font-medium transition flex items-center gap-3 ${optionButtonClass(
-                        isSelected,
-                        showCorrect,
-                        showWrong,
-                      )}`}
-                    >
-                      <span
-                        className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs font-bold ${optionRadioClass(
-                          isSelected,
-                          showCorrect,
-                          showWrong,
-                        )}`}
-                      >
-                        {showCorrect ? "✓" : showWrong ? "✗" : isSelected ? opt : ""}
-                      </span>
-                      <span>
-                        {opt}. {q.options[opt]}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <ReadingMcqOptions
+                question={q}
+                partNumber={partNum}
+                selected={answers[q.id] as string | undefined}
+                onSelect={opt => onAnswer(q.id, opt)}
+                readOnly={readOnly}
+                showFeedback={showFeedback}
+                optionButtonClass={optionButtonClass}
+                optionRadioClass={optionRadioClass}
+              />
               {showFeedback && (
                 <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2 text-xs text-yellow-900">
                   💡 {q.explanation}

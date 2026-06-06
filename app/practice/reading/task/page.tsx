@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VocabularySelectableText } from "../../../components/VocabularySelectableText";
@@ -15,11 +15,15 @@ import {
   matchesReadingPracticeFilter,
   partNumberFromRow,
 } from "../../../lib/reading-task-types";
+import { readingQuestionPrompt } from "../../../lib/reading-part3-questions";
+import { ReadingMcqOptions } from "../../../components/reading/ReadingMcqOptions";
+import { usePracticeCountdown } from "../../../hooks/usePracticeCountdown";
+import { formatPracticeTime } from "../../../lib/mock-test-times";
 
 type Question = {
   id: number;
   question: string;
-  options: { A: string; B: string; C: string; D: string };
+  options: Record<string, string>;
   correct_answer: string;
   explanation: string;
 };
@@ -63,10 +67,13 @@ function ReadingContent() {
   const [score, setScore] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [timeLeft, setTimeLeft] = useState(READING_PARTS[0].timeMinutes * 60);
   const [paused, setPaused] = useState(false);
   const [maxPartReached, setMaxPartReached] = useState(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const currentPart = READING_PARTS[currentPartIndex];
+  const { timeLeft, reset: resetTimer } = usePracticeCountdown(
+    currentPart.timeMinutes * 60,
+    !loading && !paused && !submitted && Boolean(currentTask),
+  );
   const taskSiblings = usePracticeTaskSiblings(
     "reading",
     taskId,
@@ -89,27 +96,6 @@ function ReadingContent() {
       setScore(null);
     }
   }, [currentPartIndex, tasks, fromLibrary]);
-
-  useEffect(() => {
-    setTimeLeft(READING_PARTS[currentPartIndex].timeMinutes * 60);
-  }, [currentPartIndex, currentTask?.id]);
-
-  useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (!loading && !paused && !submitted && currentTask) {
-      timerRef.current = setInterval(() => {
-        setTimeLeft(t => {
-          if (t <= 1) {
-            clearInterval(timerRef.current!);
-            handleTimeExpired();
-            return 0;
-          }
-          return t - 1;
-        });
-      }, 1000);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [loading, paused, submitted, currentTask, currentPartIndex, fromLibrary]);
 
   async function loadTasks() {
     setLoading(true);
@@ -168,9 +154,7 @@ function ReadingContent() {
   }
 
   function formatTime(seconds: number) {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, "0")}`;
+    return formatPracticeTime(seconds);
   }
 
   function handleAnswer(questionId: number, option: string) {
@@ -190,14 +174,6 @@ function ReadingContent() {
     setCurrentPartIndex(next);
   }
 
-  function handleTimeExpired() {
-    if (!fromLibrary && currentPartIndex < READING_PARTS.length - 1) {
-      goToNextPart();
-      return;
-    }
-    handleSubmit();
-  }
-
   function handleSubmit() {
     if (!currentTask?.content) return;
     const questions = currentTask.content.questions || [];
@@ -206,7 +182,6 @@ function ReadingContent() {
     questions.forEach(q => { if (answers[q.id] === q.correct_answer) correct++; });
     blanks.forEach((b: any) => { if (answers[b.id] === b.correct_answer) correct++; });
     const total = questions.length + blanks.length;
-    if (timerRef.current) clearInterval(timerRef.current);
     setSubmitted(true);
     const result = {
       taskId: currentTask.id,
@@ -227,8 +202,6 @@ function ReadingContent() {
     storeResultsReturn(listReturnHref);
     router.push("/practice/results");
   }
-
-  const currentPart = READING_PARTS[currentPartIndex];
 
   if (loading) {
     return (
@@ -275,7 +248,7 @@ function ReadingContent() {
             setAnswers({});
             setSubmitted(false);
             setScore(null);
-            setTimeLeft(currentPart.timeMinutes * 60);
+            resetTimer();
           }}
             className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition" title="Reset">
             🔄
@@ -459,39 +432,34 @@ function ReadingContent() {
           {/* RIGHT — Questions */}
           <div className="w-1/2 overflow-y-auto bg-gray-50 p-8 min-h-0">
             <h2 className="text-xl font-bold text-gray-900 mb-6">
-              Choose the best option according to the information given in the message:
+              {readingQuestionPrompt(
+                partNumberFromRow(currentTask),
+                "Choose the best option according to the information given in the message:",
+              )}
             </h2>
             <div className="space-y-8">
               {currentTask.content.questions?.map((q, i) => (
                 <div key={`${q.id}-${i}`}>
                   <p className="text-sm font-semibold text-gray-800 mb-3">{i + 1}. {q.question}</p>
-                  <div className="space-y-2">
-                    {(["A", "B", "C", "D"] as const).map(opt => {
-                      const isSelected = answers[q.id] === opt;
-                      const isCorrect = opt === q.correct_answer;
-                      const isWrong = submitted && isSelected && !isCorrect;
-                      const showCorrect = submitted && isCorrect;
-                      return (
-                        <button key={`${q.id}-${opt}`} onClick={() => handleAnswer(q.id, opt)}
-                          className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition flex items-center gap-3 ${
-                            showCorrect ? "border-green-500 bg-green-50 text-green-800"
-                            : isWrong ? "border-red-400 bg-red-50 text-red-800"
-                            : isSelected ? "border-blue-500 bg-blue-50 text-blue-800"
-                            : "border-gray-200 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50"
-                          }`}>
-                          <span className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs font-bold ${
-                            showCorrect ? "border-green-500 bg-green-500 text-white"
-                            : isWrong ? "border-red-400 bg-red-400 text-white"
-                            : isSelected ? "border-blue-500 bg-blue-500 text-white"
-                            : "border-gray-300"
-                          }`}>
-                            {showCorrect ? "✓" : isWrong ? "✗" : isSelected ? opt : ""}
-                          </span>
-                          <span>{opt}. {q.options[opt]}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <ReadingMcqOptions
+                    question={q}
+                    partNumber={partNumberFromRow(currentTask)}
+                    selected={answers[q.id]}
+                    onSelect={opt => handleAnswer(q.id, opt)}
+                    showFeedback={submitted}
+                    optionButtonClass={(selected, showCorrect, showWrong) =>
+                      showCorrect ? "border-green-500 bg-green-50 text-green-800"
+                      : showWrong ? "border-red-400 bg-red-50 text-red-800"
+                      : selected ? "border-blue-500 bg-blue-50 text-blue-800"
+                      : "border-gray-200 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50"
+                    }
+                    optionRadioClass={(selected, showCorrect, showWrong) =>
+                      showCorrect ? "border-green-500 bg-green-500 text-white"
+                      : showWrong ? "border-red-400 bg-red-400 text-white"
+                      : selected ? "border-blue-500 bg-blue-500 text-white"
+                      : "border-gray-300"
+                    }
+                  />
                   {submitted && (
                     <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2 text-xs text-yellow-800">
                       💡 {q.explanation}

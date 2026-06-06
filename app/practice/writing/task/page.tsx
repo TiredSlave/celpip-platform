@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
@@ -7,6 +7,8 @@ import { storeResultsReturn, taskReturnHref } from "../../../lib/practice-naviga
 import { navigatePracticeTask } from "../../../lib/practice-task-nav";
 import { usePracticeTaskSiblings } from "../../../lib/use-practice-task-siblings";
 import { PracticeTaskTypeDropdown } from "../../../components/PracticeTaskTypeDropdown";
+import { usePracticeCountdown } from "../../../hooks/usePracticeCountdown";
+import { formatPracticeTime } from "../../../lib/mock-test-times";
 
 type WritingTaskContent = {
   scenario?: string;
@@ -53,11 +55,14 @@ function WritingContent() {
   const [loading, setLoading] = useState(true);
   const [evaluating, setEvaluating] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [timeLeft, setTimeLeft] = useState(27 * 60);
   const [paused, setPaused] = useState(false);
   /** Writing Task 2: candidate must pick A or B before the response is evaluated as that choice */
   const [task2Choice, setTask2Choice] = useState<"A" | "B" | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const currentPart = WRITING_PARTS[currentPartIndex];
+  const { timeLeft, reset: resetTimer } = usePracticeCountdown(
+    currentPart.timeMinutes * 60,
+    !loading && !paused && !submitted && Boolean(currentTask),
+  );
   const taskSiblings = usePracticeTaskSiblings(
     "writing",
     taskId,
@@ -75,26 +80,8 @@ function WritingContent() {
       setTask2Choice(null);
       setSubmitted(false);
       setSubmitError(null);
-      setTimeLeft(part.timeMinutes * 60);
     }
   }, [currentPartIndex, tasks]);
-
-  useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (!loading && !paused && !submitted) {
-      timerRef.current = setInterval(() => {
-        setTimeLeft(t => {
-          if (t <= 1) {
-            clearInterval(timerRef.current!);
-            void handleSubmit();
-            return 0;
-          }
-          return t - 1;
-        });
-      }, 1000);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [loading, paused, submitted, currentPartIndex]);
 
   async function loadTasks() {
     setLoading(true);
@@ -124,9 +111,7 @@ function WritingContent() {
   }
 
   function formatTime(seconds: number) {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, "0")}`;
+    return formatPracticeTime(seconds);
   }
 
   function countWords(text: string) {
@@ -141,7 +126,6 @@ function WritingContent() {
     }
     setEvaluating(true);
     setSubmitError(null);
-    if (timerRef.current) clearInterval(timerRef.current);
     const c = currentTask.content;
     const textA = c.option_a ?? c.opinion_options?.[0] ?? "";
     const textB = c.option_b ?? c.opinion_options?.[1] ?? "";
@@ -190,7 +174,6 @@ function WritingContent() {
     setEvaluating(false);
   }
 
-  const currentPart = WRITING_PARTS[currentPartIndex];
   const wordCount = countWords(response);
   const wordLimit = currentTask?.content.word_limit || 200;
   const isOverLimit = wordCount > wordLimit;
@@ -244,7 +227,7 @@ function WritingContent() {
             setResponse("");
             setTask2Choice(null);
             setSubmitError(null);
-            setTimeLeft(currentPart.timeMinutes * 60);
+            resetTimer();
           }}
             className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition" title="Clear draft & reset timer">
             🔄

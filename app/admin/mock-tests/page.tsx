@@ -188,13 +188,17 @@ export default function MockTestsPage() {
     setLoading(true);
     const headers = await authHeaders();
     const res = await fetch("/api/admin/mock-tests", { headers });
+    const json = await res.json().catch(() => ({}));
     if (res.ok) {
-      const json = await res.json();
       setMockTests(json.tests || []);
       setAssignedTaskIds(new Set(json.assignedTaskIds || []));
     } else {
-      const { data } = await supabase.from("mock_tests").select("*").order("created_at", { ascending: true });
-      setMockTests(data || []);
+      setMockTests([]);
+      setMessage(
+        "Error: " +
+          (json.error ||
+            `Could not load mock tests (${res.status}). Add SUPABASE_SERVICE_ROLE_KEY on Vercel and redeploy.`),
+      );
     }
 
     const { data: taskRows } = await supabase.from("admin_tasks").select("*").order("task_type");
